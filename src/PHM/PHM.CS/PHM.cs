@@ -366,13 +366,29 @@ namespace PHM.CS
 #if TEST_BUILD
       internal override bool CheckInvariant (uint h, int s)
       {
-        var bitmap = Bitmap;
-        for (var iter = 0; iter < Nodes.Length; ++iter)
+        if (PopCount (Bitmap) != Nodes.Length)
         {
-          if (bitmap == 0)
+          return false;
+        }
+
+        var bitmap = Bitmap;
+
+        var hash = -1;
+        var iter = -1;
+
+        while (bitmap != 0)
+        {
+          ++hash;
+
+          var isSet = (bitmap & 0x1) != 0;
+          bitmap >>= 1;
+
+          if (!isSet)
           {
-            return false;
+            continue;
           }
+
+          ++iter;
 
           var n = Nodes[iter];
           if (n == null)
@@ -380,13 +396,11 @@ namespace PHM.CS
             return false;
           }
 
-          if (!n.CheckInvariant (h | (uint)(iter << s), s + TrieShift))
+          if (!n.CheckInvariant (h | (uint)(hash << s), s + TrieShift))
           {
             return false;
           }
         }
-
-        // TODO: Check bitmap
 
         return true;
       }

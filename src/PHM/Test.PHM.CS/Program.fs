@@ -166,7 +166,7 @@ let main argv =
   let testCount = 1000
 #endif
 
-  Properties.``PHM must contain all values`` [|(0, ""); (2, "")|] |> ignore
+  Properties.``PHM must contain all values`` [|(2, ""); (1, ""); (0, "")|] |> ignore
 
   let config = { Config.Quick with MaxTest = testCount; MaxFail = testCount }
   Check.All<Properties>  config
