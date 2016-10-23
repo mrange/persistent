@@ -357,10 +357,17 @@ namespace PHM.CS
         Debug.Assert (s < TrieMaxShift);
         var b1 = Bit (h1, s);
         var b2 = Bit (h2, s);
-        return b1 < b2
-          ? new BitmapNodeN<K, V> (b1 | b2, new [] { n1, n2 })
-          : new BitmapNodeN<K, V> (b2 | b1, new [] { n2, n1 })
-          ;
+        if (b1 == b2)
+        {
+          return new BitmapNodeN<K, V> (b1, new [] { FromTwoNodes (s + TrieShift, h1, n1, h2, n2) });
+        }
+        else
+        {
+          return b1 < b2
+            ? new BitmapNodeN<K, V> (b1 | b2, new [] { n1, n2 })
+            : new BitmapNodeN<K, V> (b2 | b1, new [] { n2, n1 })
+            ;
+        }
       }
 
 #if TEST_BUILD
@@ -445,8 +452,8 @@ namespace PHM.CS
         else
         {
           var nvs = CopyArrayMakeHole (bit, Bitmap, Nodes);
-          nvs[localIdx] = Nodes[localIdx].Set (s + TrieShift, n);
-          return new BitmapNodeN<K, V> (Bitmap, nvs);
+          nvs[localIdx] = n;
+          return new BitmapNodeN<K, V> (Bitmap | bit, nvs);
         }
       }
 

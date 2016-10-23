@@ -25,6 +25,16 @@ type Empty () =
 
 type CopyArrayMakeHoleTestData = CopyArrayMakeHoleTestData of uint32*uint32*Empty []
 
+module FsLinq =
+  open System.Linq
+
+  let inline first    source                        = Enumerable.First    (source)
+  let inline groupBy  (selector : 'T -> 'U) source  = Enumerable.GroupBy  (source, Func<'T, 'U> selector)
+  let inline last     source                        = Enumerable.Last     (source)
+  let inline map      (selector : 'T -> 'U) source  = Enumerable.Select   (source, Func<'T, 'U> selector)
+  let inline sortBy   (selector : 'T -> 'U) source  = Enumerable.OrderBy  (source, Func<'T, 'U> selector)
+  let inline toArray  source                        = Enumerable.ToArray  (source)
+
 module Common =
   let notIdentical<'T when 'T : not struct> (f : 'T) (s : 'T) = obj.ReferenceEquals (f, s) |> not
 
@@ -65,6 +75,9 @@ module Common =
 
   let set k v (phm : IPersistentHashMap<_, _>) = phm.Set (k, v)
 
+  let uniqueKey vs = vs |> FsLinq.groupBy fst |> FsLinq.map (fun g -> g.Key, (g |> FsLinq.map snd |> FsLinq.last)) |> FsLinq.sortBy fst |> FsLinq.toArray
+
+
   let fromArray kvs =
     Array.fold
       (fun s (k, v) -> set k v s)
@@ -73,8 +86,13 @@ module Common =
 
   let toArray (phm : IPersistentHashMap<'K, 'V>) =
     phm
-    |> Seq.map (fun kv -> kv.Key, kv.Value)
-    |> Seq.toArray
+    |> FsLinq.map (fun kv -> kv.Key, kv.Value)
+    |> FsLinq.toArray
+
+  let toSortedKeyArray phm =
+    let vs = phm |> toArray
+    vs |> Array.sortInPlaceBy fst
+    vs
 
   let checkInvariant (phm : IPersistentHashMap<'K, 'V>) = phm.CheckInvariant ()
 
@@ -143,20 +161,13 @@ type Properties () =
     && expected = actual
 
   static member ``PHM must contain all values`` (vs : (int*string) []) =
-    let expected  = vs |> Seq.groupBy fst |> Seq.map (fun (k, vs) -> k, (vs |> Seq.map snd |> Seq.last)) |> Seq.sortBy fst |> Seq.toArray
+    let expected  = uniqueKey vs
     let phm       = vs |> fromArray
-    let actual    = phm |> toArray |> Array.sortBy fst
+    let actual    = phm |> toSortedKeyArray
 
-    let r = notIdentical expected actual
-            && checkInvariant phm
-            && expected = actual
-
-    if r then
-      r
-    else
-      printfn "%A" vs
-      printfn "%s" ((vs |> fromArray).ToString ())
-      false
+    notIdentical expected actual
+    && checkInvariant phm
+    && expected = actual
 
 [<EntryPoint>]
 let main argv =
@@ -166,7 +177,7 @@ let main argv =
   let testCount = 1000
 #endif
 
-  Properties.``PHM must contain all values`` [|(2, ""); (1, ""); (0, "")|] |> ignore
+//  Properties.``PHM must contain all values`` [|(21, ""); (5, "")|] |> printfn "Result: %A"
 
   let config = { Config.Quick with MaxTest = testCount; MaxFail = testCount }
   Check.All<Properties>  config
