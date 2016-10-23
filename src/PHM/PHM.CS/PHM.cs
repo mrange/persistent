@@ -26,13 +26,14 @@ namespace PHM.CS
   public partial interface IPersistentHashMap<K, V> : IEnumerable<KeyValuePair<K, V>>
     where K : IEquatable<K>
   {
-    bool IsEmpty                  { get; }
-    bool Visit                    (Func<uint, K, V, bool> r);
-    IPersistentHashMap<K, V> Set  (K k, V v);
-    bool TryFind                  (K k, out V v);
 #if TEST_BUILD
-    bool CheckInvariant           ();
+    bool                      CheckInvariant  ();
 #endif
+    bool                      IsEmpty         { get; }
+    bool                      Visit           (Func<uint, K, V, bool> r);
+    IPersistentHashMap<K, V>  Set             (K k, V v);
+    bool                      TryFind         (K k, out V v);
+    IPersistentHashMap<K, V>  Unset           (K k);
   }
 
   public static partial class PersistentHashMap
@@ -40,7 +41,7 @@ namespace PHM.CS
     public static IPersistentHashMap<K, V> Empty<K, V> ()
       where K : IEquatable<K>
     {
-      return new EmptyNode<K ,V> ();
+      return BaseNode<K ,V>.EmptyNode;
     }
 
     internal const int TrieShift    = 4                 ;
@@ -119,6 +120,7 @@ namespace PHM.CS
     internal static T[] CopyArrayMakeHole<T> (uint holebit, uint bitmap, T[] vs)
     {
       Debug.Assert ((holebit & bitmap) == 0);
+      Debug.Assert (PopCount (bitmap) == vs.Length);
 
       var holemask  = holebit - 1;
       var nvs       = new T[vs.Length + 1];
@@ -130,11 +132,54 @@ namespace PHM.CS
         nvs[iter] = vs[iter];
       }
 
-      ++iter;
+      for (; iter < vs.Length; ++iter)
+      {
+        nvs[iter + 1] = vs[iter];
+      }
+
+      return nvs;
+    }
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    internal static T[] CopyArrayRemoveHole<T> (int at, T[] vs)
+    {
+      Debug.Assert (at < vs.Length);
+      Debug.Assert (vs.Length > 1);
+
+      var nvs = new T[vs.Length - 1];
+      for (var iter = 0; iter < at; ++iter)
+      {
+        nvs[iter] = vs[iter];
+      }
+
+      for (var iter = at; iter < nvs.Length; ++iter)
+      {
+        nvs[at] = vs[at + 1];
+      }
+
+      return nvs;
+    }
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    internal static T[] CopyArrayRemoveHole<T> (uint holebit, uint bitmap, T[] vs)
+    {
+      Debug.Assert ((holebit & bitmap) == 1);
+      Debug.Assert (PopCount (bitmap) == vs.Length);
+      Debug.Assert (vs.Length > 0);
+
+      var holemask  = holebit - 1;
+      var nvs       = new T[vs.Length - 1];
+      var iter      = 0;
+
+      for (; (bitmap & holemask) != 0; ++iter)
+      {
+        bitmap &= bitmap - 1;
+        nvs[iter] = vs[iter];
+      }
 
       for (; iter < nvs.Length; ++iter)
       {
-        nvs[iter] = vs[iter - 1];
+        nvs[iter] = vs[iter + 1];
       }
 
       return nvs;
@@ -143,6 +188,8 @@ namespace PHM.CS
     internal abstract partial class BaseNode<K, V> : IPersistentHashMap<K ,V>
       where K : IEquatable<K>
     {
+      public static readonly EmptyNode<K, V> EmptyNode = new EmptyNode<K, V> ();
+
       bool IPersistentHashMap<K, V>.IsEmpty
       {
         get
@@ -151,7 +198,7 @@ namespace PHM.CS
         }
       }
 
-      bool IPersistentHashMap<K, V>.Visit(Func<uint, K, V, bool> r)
+      bool IPersistentHashMap<K, V>.Visit (Func<uint, K, V, bool> r)
       {
         if (r != null)
         {
@@ -163,18 +210,23 @@ namespace PHM.CS
         }
       }
 
-      IPersistentHashMap<K, V> IPersistentHashMap<K ,V>.Set(K k, V v)
+      IPersistentHashMap<K, V> IPersistentHashMap<K ,V>.Set (K k, V v)
       {
         return Set (0, new KeyValueNode<K, V> ((uint)k.GetHashCode (), k, v));
       }
 
-      bool IPersistentHashMap<K ,V>.TryFind(K k, out V v)
+      bool IPersistentHashMap<K ,V>.TryFind (K k, out V v)
       {
         return TryFind ((uint)k.GetHashCode (), 0, k, out v);
       }
 
+      public IPersistentHashMap<K, V> Unset (K k)
+      {
+        return Unset ((uint)k.GetHashCode (), 0, k) ?? EmptyNode;
+      }
+
 #if TEST_BUILD
-      bool IPersistentHashMap<K ,V>.CheckInvariant()
+      bool IPersistentHashMap<K ,V>.CheckInvariant ()
       {
         return CheckInvariant (0, 0);
       }
@@ -204,26 +256,26 @@ namespace PHM.CS
       }
 
       #if TEST_BUILD
-      public override string ToString()
+      public override string ToString ()
       {
         var sb = new StringBuilder (16);
         Describe (sb, 0);
-        return sb.ToString();
+        return sb.ToString ();
       }
 #endif
 
 #if TEST_BUILD
-      internal abstract bool CheckInvariant (uint h, int s);
-      internal abstract void Describe       (StringBuilder sb, int indent);
+      internal abstract bool            CheckInvariant  (uint h, int s);
+      internal abstract void            Describe        (StringBuilder sb, int indent);
 #endif
-      internal virtual  bool Empty          ()
+      internal virtual  bool            Empty           ()
       {
         return false;
       }
-
-      internal abstract bool Receive        (Func<uint, K, V, bool> r);
-      internal abstract BaseNode<K, V> Set  (int s, KeyValueNode<K, V> n);
-      internal abstract bool TryFind        (uint h, int s, K k, out V v);
+      internal abstract bool            Receive         (Func<uint, K, V, bool> r);
+      internal abstract BaseNode<K, V>  Set             (int s, KeyValueNode<K, V> n);
+      internal abstract bool            TryFind         (uint h, int s, K k, out V v);
+      internal abstract BaseNode<K, V>  Unset           (uint h, int s, K k);
     }
 
     internal sealed partial class EmptyNode<K, V> : BaseNode<K, V>
@@ -240,7 +292,7 @@ namespace PHM.CS
         sb.IndentedLine (indent, "Empty");
       }
 #endif
-      internal override bool Empty()
+      internal override bool Empty ()
       {
         return true;
       }
@@ -259,6 +311,11 @@ namespace PHM.CS
       {
         v = default (V);
         return false;
+      }
+
+      internal override BaseNode<K, V> Unset (uint h, int s, K k)
+      {
+        return null;
       }
     }
 
@@ -326,6 +383,18 @@ namespace PHM.CS
         {
           v = default (V);
           return false;
+        }
+      }
+
+      internal override BaseNode<K, V> Unset (uint h, int s, K k)
+      {
+        if (Hash == h && Key.Equals (k))
+        {
+          return null;
+        }
+        else
+        {
+          return this;
         }
       }
     }
@@ -471,6 +540,40 @@ namespace PHM.CS
           return false;
         }
       }
+
+      internal sealed override BaseNode<K, V> Unset (uint h, int s, K k)
+      {
+        var bit = Bit (h, s);
+        if ((bit & Bitmap) != 0)
+        {
+          var localIdx  = PopCount (Bitmap & (bit - 1));
+          var updated   =  Nodes[localIdx].Unset (h, s + TrieShift, k);
+          if (updated == Nodes[localIdx])
+          {
+            return this;
+          }
+          else if (updated != null)
+          {
+            var nvs = CopyArray (Nodes);
+            nvs[localIdx] = updated;
+            return new BitmapNodeN<K, V> (Bitmap, nvs);
+          }
+          else if (Nodes.Length > 1)
+          {
+            var nvs = CopyArrayRemoveHole (bit, Bitmap, Nodes);
+            return new BitmapNodeN<K, V> (Bitmap & ~bit, nvs);
+          }
+          else
+          {
+            return null;
+          }
+        }
+        else
+        {
+          return this;
+        }
+      }
+
     }
 
     internal sealed partial class HashCollisionNodeN<K, V> : BaseNode<K, V>
@@ -533,7 +636,7 @@ namespace PHM.CS
         return true;
       }
 
-      internal sealed override BaseNode<K, V> Set(int s, KeyValueNode<K, V> n)
+      internal sealed override BaseNode<K, V> Set (int s, KeyValueNode<K, V> n)
       {
         var h = n.Hash;
         if (Hash == h)
@@ -581,6 +684,36 @@ namespace PHM.CS
         {
           v = default (V);
           return false;
+        }
+      }
+
+      internal override BaseNode<K, V> Unset (uint h, int s, K k)
+      {
+        if (Hash == h)
+        {
+          for (var iter = 0; iter < KeyValues.Length; ++iter)
+          {
+            var kv = KeyValues[iter];
+            if (kv.Key.Equals (k))
+            {
+              // TODO: Case for .Length == 2
+              if (KeyValues.Length > 1)
+              {
+                var rvs = CopyArrayRemoveHole (iter, KeyValues);
+                return new HashCollisionNodeN<K, V> (h, rvs);
+              }
+              else
+              {
+                return null;
+              }
+            }
+          }
+
+          return this;
+        }
+        else
+        {
+          return this;
         }
       }
     }

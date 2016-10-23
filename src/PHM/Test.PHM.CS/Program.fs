@@ -75,8 +75,12 @@ module Common =
 
   let set k v (phm : IPersistentHashMap<_, _>) = phm.Set (k, v)
 
-  let uniqueKey vs = vs |> FsLinq.groupBy fst |> FsLinq.map (fun g -> g.Key, (g |> FsLinq.map snd |> FsLinq.last)) |> FsLinq.sortBy fst |> FsLinq.toArray
-
+  let uniqueKey vs = 
+    vs 
+    |> FsLinq.groupBy fst 
+    |> FsLinq.map (fun g -> g.Key, (g |> FsLinq.map snd |> FsLinq.last)) 
+    |> FsLinq.sortBy fst 
+    |> FsLinq.toArray
 
   let fromArray kvs =
     Array.fold
