@@ -1,4 +1,4 @@
-﻿open FsCheck
+open FsCheck
 open PHM.CS
 
 open System

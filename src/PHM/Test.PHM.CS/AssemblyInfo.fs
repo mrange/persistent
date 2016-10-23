@@ -1,4 +1,4 @@
-﻿namespace Test.PHM.CS.AssemblyInfo
+namespace Test.PHM.CS.AssemblyInfo
 
 open System.Reflection
 open System.Runtime.CompilerServices

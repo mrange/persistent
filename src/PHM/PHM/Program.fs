@@ -1,4 +1,4 @@
-﻿module PersistentHashMap =
+module PersistentHashMap =
   open System
 
   type PHM<'K, 'V when 'K :> IEquatable<'K>>  =

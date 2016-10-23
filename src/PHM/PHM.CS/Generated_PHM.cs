@@ -1,4 +1,4 @@
-﻿namespace PHM.CS
+namespace PHM.CS
 {
   using System;
   using System.Runtime.CompilerServices;
