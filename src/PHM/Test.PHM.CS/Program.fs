@@ -1,3 +1,18 @@
+// ----------------------------------------------------------------------------------------------
+// Copyright 2016 Mårten Rånge
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+// ----------------------------------------------------------------------------------------------
 open FsCheck
 open PHM.CS
 
@@ -6,16 +21,16 @@ open System.Collections.Generic
 
 [<AllowNullLiteral>]
 type Empty () =
-  let x = 3
+  inherit obj ()
 
 type CopyArrayMakeHoleTestData = CopyArrayMakeHoleTestData of uint32*uint32*Empty []
 
 module Common =
   let notIdentical<'T when 'T : not struct> (f : 'T) (s : 'T) = obj.ReferenceEquals (f, s) |> not
 
-  let checkInvariant b str =
+  let check b str =
     if not b then
-      printfn "Invariant failed: %s" str
+      printfn "Check failed: %s" str
       failwith str
 
   let popCount v =
@@ -27,7 +42,7 @@ module Common =
     loop 0u v
 
   let copyArrayMakeHole holeBit bitmap (vs : 'T []) =
-    checkInvariant (holeBit <> 0u) "holeBit must bit be 0"
+    check (holeBit <> 0u) "holeBit must bit be 0"
     let nvs       = Array.zeroCreate (vs.Length + 1)
     let mask      = holeBit - 1u
     let lowCount  = popCount (bitmap &&& mask)
@@ -61,6 +76,8 @@ module Common =
     |> Seq.map (fun kv -> kv.Key, kv.Value)
     |> Seq.toArray
 
+  let checkInvariant (phm : IPersistentHashMap<'K, 'V>) = phm.CheckInvariant ()
+
 open Common
 
 type Generators =
@@ -86,8 +103,8 @@ type Generators =
           else
             loop (bp + 1) zbp (bmp >>> 1)
         let holeBit = 1u <<< loop 0 zbitpos bitmap
-        checkInvariant (holeBit <> 0u)              "holeBit must not be zero"
-        checkInvariant ((holeBit &&& bitmap) = 0u)  "holeBit must target empty pos in bitmap"
+        check (holeBit <> 0u)              "holeBit must not be zero"
+        check ((holeBit &&& bitmap) = 0u)  "holeBit must target empty pos in bitmap"
         return CopyArrayMakeHoleTestData (holeBit, bitmap, vs)
       }
     { new Arbitrary<CopyArrayMakeHoleTestData> () with
@@ -126,10 +143,12 @@ type Properties () =
     && expected = actual
 
   static member ``PHM must contain all values`` (vs : (int*string) []) =
-    let expected  = vs |> Seq.groupBy fst |> Seq.map (fun (k, vs) -> k, (vs |> Seq.map snd |> Seq.last)) |> Seq.toArray
-    let actual    = vs |> fromArray |> toArray
+    let expected  = vs |> Seq.groupBy fst |> Seq.map (fun (k, vs) -> k, (vs |> Seq.map snd |> Seq.last)) |> Seq.sortBy fst |> Seq.toArray
+    let phm       = vs |> fromArray
+    let actual    = phm |> toArray |> Array.sortBy fst
 
     let r = notIdentical expected actual
+            && checkInvariant phm
             && expected = actual
 
     if r then
@@ -146,6 +165,10 @@ let main argv =
 #else
   let testCount = 1000
 #endif
+
+  Properties.``PHM must contain all values`` [|(0, ""); (2, "")|] |> ignore
+
   let config = { Config.Quick with MaxTest = testCount; MaxFail = testCount }
   Check.All<Properties>  config
+
   0

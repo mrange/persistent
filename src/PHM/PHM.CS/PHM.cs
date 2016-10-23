@@ -1,3 +1,18 @@
+// ----------------------------------------------------------------------------------------------
+// Copyright 2016 Mårten Rånge
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+// ----------------------------------------------------------------------------------------------
 namespace PHM.CS
 {
   using System;
@@ -15,6 +30,9 @@ namespace PHM.CS
     bool Visit                    (Func<uint, K, V, bool> r);
     IPersistentHashMap<K, V> Set  (K k, V v);
     bool TryFind                  (K k, out V v);
+#if TEST_BUILD
+    bool CheckInvariant           ();
+#endif
   }
 
   public static partial class PersistentHashMap
@@ -155,23 +173,12 @@ namespace PHM.CS
         return TryFind ((uint)k.GetHashCode (), 0, k, out v);
       }
 
-      public override string ToString()
+#if TEST_BUILD
+      bool IPersistentHashMap<K ,V>.CheckInvariant()
       {
-        var sb = new StringBuilder (16);
-        Describe (sb, 0);
-        return sb.ToString();
+        return CheckInvariant (0, 0);
       }
-
-      internal abstract bool CheckInvariant (uint h, int s);
-      internal abstract void Describe       (StringBuilder sb, int indent);
-      internal virtual  bool Empty          ()
-      {
-        return false;
-      }
-
-      internal abstract bool Receive        (Func<uint, K, V, bool> r);
-      internal abstract BaseNode<K, V> Set  (int s, KeyValueNode<K, V> n);
-      internal abstract bool TryFind        (uint h, int s, K k, out V v);
+#endif
 
       public IEnumerator<KeyValuePair<K, V>> GetEnumerator ()
       {
@@ -195,11 +202,34 @@ namespace PHM.CS
       {
         return GetEnumerator ();
       }
+
+      #if TEST_BUILD
+      public override string ToString()
+      {
+        var sb = new StringBuilder (16);
+        Describe (sb, 0);
+        return sb.ToString();
+      }
+#endif
+
+#if TEST_BUILD
+      internal abstract bool CheckInvariant (uint h, int s);
+      internal abstract void Describe       (StringBuilder sb, int indent);
+#endif
+      internal virtual  bool Empty          ()
+      {
+        return false;
+      }
+
+      internal abstract bool Receive        (Func<uint, K, V, bool> r);
+      internal abstract BaseNode<K, V> Set  (int s, KeyValueNode<K, V> n);
+      internal abstract bool TryFind        (uint h, int s, K k, out V v);
     }
 
     internal sealed partial class EmptyNode<K, V> : BaseNode<K, V>
       where K : IEquatable<K>
     {
+#if TEST_BUILD
       internal override bool CheckInvariant (uint h, int s)
       {
         return true;
@@ -209,7 +239,7 @@ namespace PHM.CS
       {
         sb.IndentedLine (indent, "Empty");
       }
-
+#endif
       internal override bool Empty()
       {
         return true;
@@ -247,15 +277,17 @@ namespace PHM.CS
         Value = v;
       }
 
+#if TEST_BUILD
       internal override bool CheckInvariant (uint h, int s)
       {
-        return CheckHash (Hash, h, s) && Hash == Key.GetHashCode ();
+        return CheckHash (Hash, h, s) && (Hash == (uint)Key.GetHashCode ());
       }
 
       internal override void Describe (StringBuilder sb, int indent)
       {
-        sb.FormatIndentedLine (indent, "KeyValue {0}, {1}, {2}", Hash, Key, Value);
+        sb.FormatIndentedLine (indent, "KeyValue Hash:0x{0:X08}, Key:{1}, Value:{2}", Hash, Key, Value);
       }
+#endif
 
       internal override bool Receive (Func<uint, K, V, bool> r)
       {
@@ -275,11 +307,11 @@ namespace PHM.CS
         }
         else if (Hash == h)
         {
-          return new HashCollisionNodeN<K ,V> (h, this, n);
+          return HashCollisionNodeN<K ,V>.FromTwoNodes (h, this, n);
         }
         else
         {
-          return new BitmapNodeN<K ,V> (s, Hash, this, h, n);
+          return BitmapNodeN<K ,V>.FromTwoNodes (s, Hash, this, h, n);
         }
       }
 
@@ -312,18 +344,36 @@ namespace PHM.CS
       }
 
       [MethodImpl (MethodImplOptions.AggressiveInlining)]
-      public BitmapNodeN (int s, uint h1, BaseNode<K, V> n1, uint h2, BaseNode<K, V> n2)
-        : this (Bit (h1, s) | Bit (h2, s), new [] { n1, n2 })
+      public static BitmapNodeN<K, V> FromNNodes (uint b, BaseNode<K, V>[] ns)
+      {
+        return new BitmapNodeN<K, V> (b, ns);
+      }
+
+      [MethodImpl (MethodImplOptions.AggressiveInlining)]
+      public static BitmapNodeN<K, V> FromTwoNodes (int s, uint h1, BaseNode<K, V> n1, uint h2, BaseNode<K, V> n2)
       {
         // TODO: Does .Assert affect inlining?
         Debug.Assert (h1 != h2);
         Debug.Assert (s < TrieMaxShift);
+        var b1 = Bit (h1, s);
+        var b2 = Bit (h2, s);
+        return b1 < b2
+          ? new BitmapNodeN<K, V> (b1 | b2, new [] { n1, n2 })
+          : new BitmapNodeN<K, V> (b2 | b1, new [] { n2, n1 })
+          ;
       }
 
+#if TEST_BUILD
       internal override bool CheckInvariant (uint h, int s)
       {
+        var bitmap = Bitmap;
         for (var iter = 0; iter < Nodes.Length; ++iter)
         {
+          if (bitmap == 0)
+          {
+            return false;
+          }
+
           var n = Nodes[iter];
           if (n == null)
           {
@@ -343,13 +393,15 @@ namespace PHM.CS
 
       internal override void Describe (StringBuilder sb, int indent)
       {
-        sb.FormatIndentedLine (indent, "Bitmap {0}, {1}", Bitmap, Nodes.Length);
+        var bits = Convert.ToString (Bitmap, 2);
+        sb.FormatIndentedLine (indent, "Bitmap Bitmap:0b{0}, Nodes:{1}", new string ('0', 32 - bits.Length) + bits, Nodes.Length);
         for (var iter = 0; iter < Nodes.Length; ++iter)
         {
           var n = Nodes[iter];
           n.Describe (sb, indent + 2);
         }
       }
+#endif
 
       internal override bool Receive (Func<uint, K, V, bool> r)
       {
@@ -414,11 +466,12 @@ namespace PHM.CS
       }
 
       [MethodImpl (MethodImplOptions.AggressiveInlining)]
-      public HashCollisionNodeN (uint h, KeyValueNode<K, V> kv1, KeyValueNode<K, V> kv2)
-        :  this (h, new [] { kv1, kv2 })
+      public static HashCollisionNodeN<K, V> FromTwoNodes (uint h, KeyValueNode<K, V> kv1, KeyValueNode<K, V> kv2)
       {
+        return new HashCollisionNodeN<K, V> (h, new [] { kv1, kv2 });
       }
 
+#if TEST_BUILD
       internal override bool CheckInvariant (uint h, int s)
       {
         for (var iter = 0; iter < KeyValues.Length; ++iter)
@@ -436,13 +489,14 @@ namespace PHM.CS
 
       internal override void Describe (StringBuilder sb, int indent)
       {
-        sb.FormatIndentedLine (indent, "HashCollison {0}, {1}", Hash, KeyValues.Length);
+        sb.FormatIndentedLine (indent, "HashCollison Hash:0x{0:X08}, KeyValues:{1}", Hash, KeyValues.Length);
         for (var iter = 0; iter < KeyValues.Length; ++iter)
         {
           var kv = KeyValues[iter];
           kv.Describe (sb, indent + 2);
         }
       }
+#endif
 
       internal override bool Receive (Func<uint, K, V, bool> r)
       {
@@ -481,7 +535,7 @@ namespace PHM.CS
         }
         else
         {
-          return new BitmapNodeN<K, V> (s, Hash, this, h, n);
+          return BitmapNodeN<K, V>.FromTwoNodes (s, Hash, this, h, n);
         }
       }
 
