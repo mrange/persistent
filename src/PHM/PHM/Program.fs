@@ -67,9 +67,9 @@
       match map with
       | Empty               -> None
       | KeyValue (h, k, v)  ->
-        if h = hash && equals k key then 
+        if h = hash && equals k key then
           Some v
-        else 
+        else
           None
       | Array (bmp, ms)->
         let idx = index hash shift
@@ -87,10 +87,10 @@
                 let v = Array.get vs i
                 Some v
               else
-                iloop key ks vs (i + 1) 
+                iloop key ks vs (i + 1)
             else
               None
-          iloop key ks vs 0 
+          iloop key ks vs 0
         else
           None
     loop hash 0 key map
@@ -110,7 +110,7 @@
         let idx = index hash shift
         let bit = 1 <<< idx
         if (bmp &&& bit) = 0 then
-          
+
           Array (bmp ||| bit)
         else
 *)
@@ -131,7 +131,7 @@ module Tests =
       expected      = actual
 
 [<EntryPoint>]
-let main argv = 
+let main argv =
   let config = { FsCheck.Config.Quick with MaxFail = 10000; MaxTest = 1000}
   FsCheck.Check.All<Tests.Properties> config
 //  let e = PersistentHashMap.Empty

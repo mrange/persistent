@@ -1,16 +1,20 @@
 ﻿namespace PHM.CS
 {
   using System;
+  using System.Collections;
+  using System.Collections.Generic;
   using System.Diagnostics;
   using System.Globalization;
   using System.Runtime.CompilerServices;
   using System.Text;
 
-  public partial interface IPersistentHashMap<K, V>
+  public partial interface IPersistentHashMap<K, V> : IEnumerable<KeyValuePair<K, V>>
     where K : IEquatable<K>
   {
-    IPersistentHashMap<K, V> Set (K k, V v);
-    bool TryFind (K k, out V v);
+    bool IsEmpty                  { get; }
+    bool Visit                    (Func<uint, K, V, bool> r);
+    IPersistentHashMap<K, V> Set  (K k, V v);
+    bool TryFind                  (K k, out V v);
   }
 
   public static partial class PersistentHashMap
@@ -63,7 +67,7 @@
 
     internal static StringBuilder FormatIndentedLine (this StringBuilder sb, int indent, string format, params object[] args)
     {
-      return sb.IndentedLine (indent, format.FormatWith (format, args));
+      return sb.IndentedLine (indent, format.FormatWith (args));
     }
 
     internal static bool CheckHash (uint h, uint ah, int s)
@@ -121,6 +125,26 @@
     internal abstract partial class BaseNode<K, V> : IPersistentHashMap<K ,V>
       where K : IEquatable<K>
     {
+      bool IPersistentHashMap<K, V>.IsEmpty
+      {
+        get
+        {
+          return Empty ();
+        }
+      }
+
+      bool IPersistentHashMap<K, V>.Visit(Func<uint, K, V, bool> r)
+      {
+        if (r != null)
+        {
+          return Receive (r);
+        }
+        else
+        {
+          return true;
+        }
+      }
+
       IPersistentHashMap<K, V> IPersistentHashMap<K ,V>.Set(K k, V v)
       {
         return Set (0, new KeyValueNode<K, V> ((uint)k.GetHashCode (), k, v));
@@ -135,13 +159,42 @@
       {
         var sb = new StringBuilder (16);
         Describe (sb, 0);
-        return base.ToString();
+        return sb.ToString();
       }
 
       internal abstract bool CheckInvariant (uint h, int s);
-      internal abstract void Describe (StringBuilder sb, int indent);
-      internal abstract BaseNode<K, V> Set (int s, KeyValueNode<K, V> n);
-      internal abstract bool TryFind (uint h, int s, K k, out V v);
+      internal abstract void Describe       (StringBuilder sb, int indent);
+      internal virtual  bool Empty          ()
+      {
+        return false;
+      }
+
+      internal abstract bool Receive        (Func<uint, K, V, bool> r);
+      internal abstract BaseNode<K, V> Set  (int s, KeyValueNode<K, V> n);
+      internal abstract bool TryFind        (uint h, int s, K k, out V v);
+
+      public IEnumerator<KeyValuePair<K, V>> GetEnumerator ()
+      {
+        var vs = new List<KeyValuePair<K, V>> (16);
+
+        Receive ((h,k,v) =>
+          {
+            var kv = new KeyValuePair<K, V> (k, v);
+            vs.Add (kv);
+            return true;
+          });
+
+        for (var iter = 0; iter < vs.Count; ++iter)
+        {
+          var v = vs[iter];
+          yield return v;
+        }
+      }
+
+      IEnumerator IEnumerable.GetEnumerator ()
+      {
+        return GetEnumerator ();
+      }
     }
 
     internal sealed partial class EmptyNode<K, V> : BaseNode<K, V>
@@ -155,6 +208,16 @@
       internal override void Describe (StringBuilder sb, int indent)
       {
         sb.IndentedLine (indent, "Empty");
+      }
+
+      internal override bool Empty()
+      {
+        return true;
+      }
+
+      internal override bool Receive (Func<uint, K, V, bool> r)
+      {
+        return true;
       }
 
       internal sealed override BaseNode<K, V> Set (int s, KeyValueNode<K, V> n)
@@ -194,10 +257,15 @@
         sb.FormatIndentedLine (indent, "KeyValue {0}, {1}, {2}", Hash, Key, Value);
       }
 
+      internal override bool Receive (Func<uint, K, V, bool> r)
+      {
+        return r (Hash, Key, Value);
+      }
+
       internal sealed override BaseNode<K, V> Set (int s, KeyValueNode<K, V> n)
       {
         // TODO: Optimize if h,k and v are identical?
-      
+
         // No need to check for reference equality as parent always creates new KeyValueNode
         var h = n.Hash;
         if (Hash == h && Key.Equals (n.Key))
@@ -283,6 +351,20 @@
         }
       }
 
+      internal override bool Receive (Func<uint, K, V, bool> r)
+      {
+        for (var iter = 0; iter < Nodes.Length; ++iter)
+        {
+          var n = Nodes[iter];
+          if (!n.Receive (r))
+          {
+            return false;
+          }
+        }
+
+        return true;
+      }
+
       internal sealed override BaseNode<K, V> Set (int s, KeyValueNode<K, V> n)
       {
         var h = n.Hash;
@@ -360,6 +442,20 @@
           var kv = KeyValues[iter];
           kv.Describe (sb, indent + 2);
         }
+      }
+
+      internal override bool Receive (Func<uint, K, V, bool> r)
+      {
+        for (var iter = 0; iter < KeyValues.Length; ++iter)
+        {
+          var kv = KeyValues[iter];
+          if (!r (kv.Hash, kv.Key, kv.Value))
+          {
+            return false;
+          }
+        }
+
+        return true;
       }
 
       internal sealed override BaseNode<K, V> Set(int s, KeyValueNode<K, V> n)
