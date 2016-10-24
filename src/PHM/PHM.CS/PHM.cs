@@ -602,7 +602,7 @@ namespace PHM.CS
         {
           var kv = KeyValues[iter];
           var k = kv.Key;
-          if (k.GetHashCode () != Hash)
+          if ((uint)k.GetHashCode () != Hash)
           {
             return false;
           }

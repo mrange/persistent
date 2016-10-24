@@ -141,7 +141,7 @@ type Generators =
 
 Arb.register<Generators> () |> ignore
 
-type ComplexKey =
+type ComplexType =
   | IntKey    of  int
   | StringKey of  int
   | TupleKey  of  int*string
@@ -187,7 +187,7 @@ type Properties () =
     && checkInvariant phm
     && expected = actual
 
-  static member ``PHM TryFind must return all added values`` (vs : (ComplexKey*string) []) =
+  static member ``PHM TryFind must return all added values`` (vs : (ComplexType*ComplexType) []) =
     let unique    = uniqueKey vs
     let phm       = unique |> fromArray
 
@@ -200,25 +200,27 @@ type Properties () =
       else
         true
 
-    loop 0
+    checkInvariant phm
+    && loop 0
 
-  static member ``PHM Unset on all added values must yield empty map`` (vs : (ComplexKey*string) []) =
+  static member ``PHM Unset on all added values must yield empty map`` (vs : (ComplexType*Empty) []) =
     let unique    = uniqueKey vs
     let phm       = unique |> fromArray
 
     let rec loop (phm : IPersistentHashMap<_, _>) i =
-      if i < unique.Length then
+      if checkInvariant phm |> not then
+        None
+      elif i < unique.Length then
         let k, v = unique.[i]
         loop (phm.Unset k) (i + 1)
       else
-        phm
+        Some phm
 
-    let phm = loop phm 0
-
-    phm.IsEmpty
+    match loop phm 0 with
+    | Some phm  -> phm.IsEmpty
+    | None      -> false
 
   static member ``PHM should behave as Map`` (vs : Action []) =
-
     let compare map (phm : IPersistentHashMap<_, _>) =
       let empty =
         match map |> Map.isEmpty, phm.IsEmpty with
@@ -231,7 +233,7 @@ type Properties () =
         | Some fv -> v = fv
         | _       -> false
 
-      (length phm = map.Count) && empty && phm.Visit (Func<_, _, _, _> visitor)
+      checkInvariant phm && (length phm = map.Count) && empty && phm.Visit (Func<_, _, _, _> visitor)
 
     let ra = ResizeArray<int> ()
 
@@ -266,7 +268,7 @@ let main argv =
   let testCount = 1000
 #endif
 
-//  Properties.``PHM TryFind must return all added values`` [|(-2, ""); (-2, null)|] |> printfn "Result: %A"
+//  Properties.``PHM TryFind must return all added values`` [|(StringKey -34, TupleKey (0,"")); (IntKey 30, IntKey 0)|] |> printfn "Result: %A"
 
   let config = { Config.Quick with MaxTest = testCount; MaxFail = testCount }
   Check.All<Properties>  config
