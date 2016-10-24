@@ -13,6 +13,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 // ----------------------------------------------------------------------------------------------
+
+// Inspired by Clojure's Persistent Hash Map (https://github.com/clojure/clojure/blob/master/src/jvm/clojure/lang/PersistentHashMap.java)
+//  and Phil Bagwell's Ideal Hash Trie (http://lampwww.epfl.ch/papers/idealhashtrees.pdf)
+//  and http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
+
 namespace PHM.CS
 {
   using System;
