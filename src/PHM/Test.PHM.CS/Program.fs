@@ -70,10 +70,15 @@ module Common =
     idLoop lowCount 0
     nvs
 
-  [<GeneralizableValue>]
-  let empty = PersistentHashMap.Empty<_, _> ()
+  let empty () = PersistentHashMap.Empty<_, _> ()
 
   let set k v (phm : IPersistentHashMap<_, _>) = phm.Set (k, v)
+
+  let length (phm : IPersistentHashMap<_, _>) = 
+    let mutable l = 0
+    let visitor _ _ _ = l <- l + 1; true
+    phm.Visit (Func<_, _, _, _> visitor) |> ignore
+    l
 
   let uniqueKey vs = 
     vs 
@@ -85,7 +90,7 @@ module Common =
   let fromArray kvs =
     Array.fold
       (fun s (k, v) -> set k v s)
-      empty
+      (empty ())
       kvs
 
   let toArray (phm : IPersistentHashMap<'K, 'V>) =
@@ -136,6 +141,15 @@ type Generators =
 
 Arb.register<Generators> () |> ignore
 
+type ComplexKey =
+  | IntKey    of  int
+  | StringKey of  int
+  | TupleKey  of  int*string
+
+type Action =
+  | Add     of int*string
+  | Remove  of int
+
 type Properties () =
   static member ``PopCount returns number of set bits`` (i : uint32) =
     let expected  = popCount i
@@ -164,7 +178,7 @@ type Properties () =
     notIdentical expected actual
     && expected = actual
 
-  static member ``PHM must contain all values`` (vs : (int*string) []) =
+  static member ``PHM toArray must contain all added values`` (vs : (int*string) []) =
     let expected  = uniqueKey vs
     let phm       = vs |> fromArray
     let actual    = phm |> toSortedKeyArray
@@ -172,6 +186,77 @@ type Properties () =
     notIdentical expected actual
     && checkInvariant phm
     && expected = actual
+
+  static member ``PHM TryFind must return all added values`` (vs : (ComplexKey*string) []) =
+    let unique    = uniqueKey vs
+    let phm       = unique |> fromArray
+
+    let rec loop i =
+      if i < unique.Length then
+        let k, v = unique.[i]
+        match phm.TryFind k with
+        | true, fv when fv = v  -> loop (i + 1)
+        | _   , _               -> false
+      else
+        true
+
+    loop 0
+
+  static member ``PHM Unset on all added values must yield empty map`` (vs : (ComplexKey*string) []) =
+    let unique    = uniqueKey vs
+    let phm       = unique |> fromArray
+
+    let rec loop (phm : IPersistentHashMap<_, _>) i =
+      if i < unique.Length then
+        let k, v = unique.[i]
+        loop (phm.Unset k) (i + 1)
+      else
+        phm
+
+    let phm = loop phm 0
+
+    phm.IsEmpty
+
+  static member ``PHM should behave as Map`` (vs : Action []) =
+
+    let compare map (phm : IPersistentHashMap<_, _>) =
+      let empty =
+        match map |> Map.isEmpty, phm.IsEmpty with
+        | true  , true
+        | false , false -> true
+        | _     , _     -> false
+
+      let visitor h k v = 
+        match map |> Map.tryFind k with
+        | Some fv -> v = fv
+        | _       -> false
+
+      (length phm = map.Count) && empty && phm.Visit (Func<_, _, _, _> visitor)
+
+    let ra = ResizeArray<int> ()
+
+    let rec loop map (phm : IPersistentHashMap<_, _>) i =
+      if i < vs.Length then
+        match vs.[i] with
+        | Add (k, v)  ->
+          ra.Add k
+          let map = map |> Map.add k v
+          let phm = phm.Set (k, v)
+          compare map phm && loop map phm (i + 1)
+        | Remove r    ->
+          if ra.Count > 0 then
+            let r   = abs r % ra.Count
+            let k   = ra.[r]
+            ra.RemoveAt r
+            let map = map |> Map.remove k
+            let phm = phm.Unset k
+            compare map phm && loop map phm (i + 1)
+          else
+            loop map phm (i + 1)
+      else
+        true
+
+    loop Map.empty (empty ()) 0
 
 [<EntryPoint>]
 let main argv =
@@ -181,7 +266,7 @@ let main argv =
   let testCount = 1000
 #endif
 
-//  Properties.``PHM must contain all values`` [|(21, ""); (5, "")|] |> printfn "Result: %A"
+//  Properties.``PHM TryFind must return all added values`` [|(-2, ""); (-2, null)|] |> printfn "Result: %A"
 
   let config = { Config.Quick with MaxTest = testCount; MaxFail = testCount }
   Check.All<Properties>  config

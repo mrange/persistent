@@ -163,7 +163,7 @@ namespace PHM.CS
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     internal static T[] CopyArrayRemoveHole<T> (uint holebit, uint bitmap, T[] vs)
     {
-      Debug.Assert ((holebit & bitmap) == 1);
+      Debug.Assert ((holebit & bitmap) != 0);
       Debug.Assert (PopCount (bitmap) == vs.Length);
       Debug.Assert (vs.Length > 0);
 
