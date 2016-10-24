@@ -331,7 +331,7 @@ module PerformanceTests =
 
   let random      = makeRandom 19740531
   let total       = 4000000
-  let outer       = 40000
+  let outer       = 4000
   let inner       = total / outer
   let multiplier  = 4
   let inserts     =
@@ -367,6 +367,8 @@ module PerformanceTests =
 
   let empty     = PersistentHashMap.Empty<Key, string> ()
   let inserted  = doInsert empty
+
+  printfn "%s" (inserted.ToString ())
 
   let insert () =
     let result    = doInsert empty
@@ -404,9 +406,9 @@ module PerformanceTests =
     [|
       "Lookup Inserted"     , lookupInserted
       "Insert"              , insert
-      "Remove"              , remove
-  //    "Insert & Lookup"     , insertAndLookup
-  //    "Insert & Remove"     , insertAndRemove
+//      "Remove"              , remove
+//      "Insert & Lookup"     , insertAndLookup
+//      "Insert & Remove"     , insertAndRemove
     |]
 
   let run () =

@@ -429,6 +429,7 @@ namespace PHM.CS
         // TODO: Does .Assert affect inlining?
         Debug.Assert (h1 != h2);
         Debug.Assert (s < TrieMaxShift);
+
         var b1 = Bit (h1, s);
         var b2 = Bit (h2, s);
         if (b1 == b2)
@@ -489,7 +490,7 @@ namespace PHM.CS
       internal override void Describe (StringBuilder sb, int indent)
       {
         var bits = Convert.ToString (Bitmap, 2);
-        sb.FormatIndentedLine (indent, "Bitmap Bitmap:0b{0}, Nodes:{1}", new string ('0', 32 - bits.Length) + bits, Nodes.Length);
+        sb.FormatIndentedLine (indent, "Bitmap Bitmap:0b{0}, Nodes:{1}", new string ('0', 16 - bits.Length) + bits, Nodes.Length);
         for (var iter = 0; iter < Nodes.Length; ++iter)
         {
           var n = Nodes[iter];
