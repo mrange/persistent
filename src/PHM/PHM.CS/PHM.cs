@@ -26,6 +26,7 @@ namespace PHM.CS
   using System.Diagnostics;
   using System.Globalization;
   using System.Runtime.CompilerServices;
+  using System.Runtime.InteropServices;
   using System.Text;
 
   public partial interface IPersistentHashMap<K, V> : IEnumerable<KeyValuePair<K, V>>
@@ -100,13 +101,24 @@ namespace PHM.CS
     }
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    internal static int FindHoleIndex (uint holebit, uint bitmap)
+    {
+      var holemask  = holebit - 1;
+      var at        = 0;
+      for (; (bitmap & holemask) != 0; ++at)
+      {
+        bitmap &= bitmap - 1;
+      }
+      return at;
+    }
+
+    // Note: Array.Copy seems significantly faster than for loops
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
     internal static T[] CopyArray<T> (T[] vs)
     {
       var nvs = new T[vs.Length];
-      for (var iter = 0; iter < vs.Length; ++iter)
-      {
-        nvs[iter] = vs[iter];
-      }
+      Array.Copy (vs, nvs, vs.Length);
       return nvs;
     }
 
@@ -114,10 +126,7 @@ namespace PHM.CS
     internal static T[] CopyArrayMakeHoleLast<T> (T[] vs)
     {
       var nvs = new T[vs.Length + 1];
-      for (var iter = 0; iter < vs.Length; ++iter)
-      {
-        nvs[iter] = vs[iter];
-      }
+      Array.Copy (vs, nvs, vs.Length);
       return nvs;
     }
 
@@ -127,21 +136,10 @@ namespace PHM.CS
       Debug.Assert ((holebit & bitmap) == 0);
       Debug.Assert (PopCount (bitmap) == vs.Length);
 
-      var holemask  = holebit - 1;
-      var nvs       = new T[vs.Length + 1];
-      var iter      = 0;
-
-      for (; (bitmap & holemask) != 0; ++iter)
-      {
-        bitmap &= bitmap - 1;
-        nvs[iter] = vs[iter];
-      }
-
-      for (; iter < vs.Length; ++iter)
-      {
-        nvs[iter + 1] = vs[iter];
-      }
-
+      var at  = FindHoleIndex (holebit, bitmap);
+      var nvs = new T[vs.Length + 1];
+      Array.Copy (vs, nvs, at);
+      Array.Copy (vs, at, nvs, at + 1, vs.Length - at);
       return nvs;
     }
 
@@ -152,16 +150,8 @@ namespace PHM.CS
       Debug.Assert (vs.Length > 1);
 
       var nvs = new T[vs.Length - 1];
-      for (var iter = 0; iter < at; ++iter)
-      {
-        nvs[iter] = vs[iter];
-      }
-
-      for (var iter = at; iter < nvs.Length; ++iter)
-      {
-        nvs[at] = vs[at + 1];
-      }
-
+      Array.Copy (vs, nvs, at);
+      Array.Copy (vs, at + 1, nvs, at, vs.Length - at - 1);
       return nvs;
     }
 
@@ -172,21 +162,10 @@ namespace PHM.CS
       Debug.Assert (PopCount (bitmap) == vs.Length);
       Debug.Assert (vs.Length > 0);
 
-      var holemask  = holebit - 1;
-      var nvs       = new T[vs.Length - 1];
-      var iter      = 0;
-
-      for (; (bitmap & holemask) != 0; ++iter)
-      {
-        bitmap &= bitmap - 1;
-        nvs[iter] = vs[iter];
-      }
-
-      for (; iter < nvs.Length; ++iter)
-      {
-        nvs[iter] = vs[iter + 1];
-      }
-
+      var at  = FindHoleIndex (holebit, bitmap);
+      var nvs = new T[vs.Length - 1];
+      Array.Copy (vs, nvs, at);
+      Array.Copy (vs, at + 1, nvs, at, vs.Length - at - 1);
       return nvs;
     }
 
@@ -553,7 +532,7 @@ namespace PHM.CS
         if ((bit & Bitmap) != 0)
         {
           var localIdx  = PopCount (Bitmap & (bit - 1));
-          var updated   =  Nodes[localIdx].Unset (h, s + TrieShift, k);
+          var updated   = Nodes[localIdx].Unset (h, s + TrieShift, k);
           if (updated == Nodes[localIdx])
           {
             return this;

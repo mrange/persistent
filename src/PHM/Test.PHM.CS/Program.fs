@@ -316,6 +316,7 @@ module PerformanceTests =
       let v = float (e - b)*r + float b |> int
       v
 
+(*
   type Key(v : int) =
     member x.Value = v
 
@@ -328,6 +329,8 @@ module PerformanceTests =
       | _           -> false
     override x.GetHashCode()    = v
     override x.ToString()       = sprintf "%d" v
+*)
+  type Key        = int
 
   let random      = makeRandom 19740531
   let total       = 4000000
@@ -336,7 +339,7 @@ module PerformanceTests =
   let multiplier  = 4
   let inserts     =
     [|
-      for i in 0..(inner - 1) -> random 0 (inner*multiplier) |> Key, string i
+      for i in 0..(inner - 1) -> random 0 (inner*multiplier), string i
     |]
   let removals  =
     let a = Array.copy inserts
@@ -367,8 +370,6 @@ module PerformanceTests =
 
   let empty     = PersistentHashMap.Empty<Key, string> ()
   let inserted  = doInsert empty
-
-  printfn "%s" (inserted.ToString ())
 
   let insert () =
     let result    = doInsert empty
@@ -401,12 +402,11 @@ module PerformanceTests =
     if not result then
       failwith "Expected true for all"
 
-
   let testCases =
     [|
       "Lookup Inserted"     , lookupInserted
       "Insert"              , insert
-//      "Remove"              , remove
+      "Remove"              , remove
 //      "Insert & Lookup"     , insertAndLookup
 //      "Insert & Remove"     , insertAndRemove
     |]
@@ -417,10 +417,9 @@ module PerformanceTests =
       let _, tm, cc0, cc1, cc2 = time outer a
       printfn "...It took %d ms, CC=%d, %d, %d" tm cc0 cc1 cc2
 
-
 [<EntryPoint>]
 let main argv =
-//  PropertyTests.run ()
+  PropertyTests.run ()
   PerformanceTests.run ()
 
   0
