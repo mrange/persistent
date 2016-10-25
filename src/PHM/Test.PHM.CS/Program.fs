@@ -213,8 +213,11 @@ module PropertyTests =
         if checkInvariant phm |> not then
           None
         elif i < unique.Length then
-          let k, v = unique.[i]
-          loop (phm.Unset k) (i + 1)
+          if phm.IsEmpty then
+            None
+          else
+            let k, v = unique.[i]
+            loop (phm.Unset k) (i + 1)
         else
           Some phm
 
@@ -318,26 +321,26 @@ module PerformanceTests =
 
 // Key is reference type in order to not kill performance in collections that always boxes
 //  the key/value
-//  type Key(v : int) =
-//    member x.Value = v
-//
-//    interface IEquatable<Key> with
-//      member x.Equals(o : Key)  = v = o.Value
-//
-//    override x.Equals(o : obj)  =
-//      match o with
-//      | :? Key as k -> v = k.Value
-//      | _           -> false
-//    override x.GetHashCode()    = v
-//    override x.ToString()       = sprintf "%d" v
-//  let makeKey i = Key i
+  type Key(v : int) =
+    member x.Value = v
 
-  type Key = int
-  let makeKey i : int = i
+    interface IEquatable<Key> with
+      member x.Equals(o : Key)  = v = o.Value
+
+    override x.Equals(o : obj)  =
+      match o with
+      | :? Key as k -> v = k.Value
+      | _           -> false
+    override x.GetHashCode()    = v
+    override x.ToString()       = sprintf "%d" v
+  let makeKey i = Key i
+
+//  type Key = int
+//  let makeKey i : int = i
 
   let random      = makeRandom 19740531
   let total       = 4000000
-  let outer       = 40000
+  let outer       = 4000
   let inner       = total / outer
   let multiplier  = 4
   let inserts     =
@@ -519,6 +522,8 @@ module PerformanceTests =
 [<EntryPoint>]
 let main argv =
   PropertyTests.run ()
+#if !DEBUG
   PerformanceTests.run ()
+#endif
 
   0
