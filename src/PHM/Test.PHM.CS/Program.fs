@@ -78,8 +78,8 @@ module PropertyTests =
 
     let length (phm : IPersistentHashMap<_, _>) = 
       let mutable l = 0
-      let visitor _ _ _ = l <- l + 1; true
-      phm.Visit (Func<_, _, _, _> visitor) |> ignore
+      let visitor _ _ = l <- l + 1; true
+      phm.Visit (Func<_, _, _> visitor) |> ignore
       l
 
     let uniqueKey vs = 
@@ -230,12 +230,12 @@ module PropertyTests =
           | false , false -> true
           | _     , _     -> false
 
-        let visitor h k v = 
+        let visitor k v = 
           match map |> Map.tryFind k with
           | Some fv -> v = fv
           | _       -> false
 
-        checkInvariant phm && (length phm = map.Count) && empty && phm.Visit (Func<_, _, _, _> visitor)
+        checkInvariant phm && (length phm = map.Count) && empty && phm.Visit (Func<_, _, _> visitor)
 
       let ra = ResizeArray<int> ()
 
@@ -316,30 +316,33 @@ module PerformanceTests =
       let v = float (e - b)*r + float b |> int
       v
 
-(*
-  type Key(v : int) =
-    member x.Value = v
+// Key is reference type in order to not kill performance in collections that always boxes
+//  the key/value
+//  type Key(v : int) =
+//    member x.Value = v
+//
+//    interface IEquatable<Key> with
+//      member x.Equals(o : Key)  = v = o.Value
+//
+//    override x.Equals(o : obj)  =
+//      match o with
+//      | :? Key as k -> v = k.Value
+//      | _           -> false
+//    override x.GetHashCode()    = v
+//    override x.ToString()       = sprintf "%d" v
+//  let makeKey i = Key i
 
-    interface IEquatable<Key> with
-      member x.Equals(o : Key)  = v = o.Value
-
-    override x.Equals(o : obj)  =
-      match o with
-      | :? Key as k -> v = k.Value
-      | _           -> false
-    override x.GetHashCode()    = v
-    override x.ToString()       = sprintf "%d" v
-*)
-  type Key        = int
+  type Key = int
+  let makeKey i : int = i
 
   let random      = makeRandom 19740531
   let total       = 4000000
-  let outer       = 4000
+  let outer       = 40000
   let inner       = total / outer
   let multiplier  = 4
   let inserts     =
     [|
-      for i in 0..(inner - 1) -> random 0 (inner*multiplier), string i
+      for i in 0..(inner - 1) -> random 0 (inner*multiplier) |> makeKey, string i
     |]
   let removals  =
     let a = Array.copy inserts
@@ -350,68 +353,164 @@ module PerformanceTests =
       a.[i] <- t
     a
 
-  let length (phm : IPersistentHashMap<_, _>) = 
-    let mutable l = 0
-    let visitor _ _ _ = l <- l + 1; true
-    phm.Visit (Func<_, _, _, _> visitor) |> ignore
-    l
+  module PersistentHashMap =
+    let length (phm : IPersistentHashMap<_, _>) = 
+      let mutable l = 0
+      let visitor _ _ = l <- l + 1; true
+      phm.Visit (Func<_, _, _> visitor) |> ignore
+      l
 
-  let inline doInsert phm =
-    inserts
-    |> Array.fold (fun (s : IPersistentHashMap<_, _>) (k, v) -> s.Set (k, v)) phm
+    let inline doInsert phm =
+      inserts
+      |> Array.fold (fun (s : IPersistentHashMap<_, _>) (k, v) -> s.Set (k, v)) phm
 
-  let inline doRemove phm =
-    inserts
-    |> Array.fold (fun (s : IPersistentHashMap<_, _>) (k, _) -> s.Unset k) phm
+    let inline doRemove phm =
+      inserts
+      |> Array.fold (fun (s : IPersistentHashMap<_, _>) (k, _) -> s.Unset k) phm
 
-  let inline doLookup fa (phm : IPersistentHashMap<_, _>) =
-    fa
-    |> Array.forall (fun (k, _) -> let r, _ = phm.TryFind k in r)
+    let inline doLookup fa (phm : IPersistentHashMap<_, _>) =
+      fa
+      |> Array.forall (fun (k, _) -> let r, _ = phm.TryFind k in r)
 
-  let empty     = PersistentHashMap.Empty<Key, string> ()
-  let inserted  = doInsert empty
-
-  let insert () =
-    let result    = doInsert empty
-#if DEBUG
-    if length result <> length inserted then
-      failwith "Expected to be same length as testSet"
-#else
-    ()
-#endif
-
-  let remove () =
-    let result    = doRemove inserted
-    if not result.IsEmpty then
-      failwith "Expected to be empty"
-
-  let insertAndRemove () =
+    let empty     = PersistentHashMap.Empty<Key, string> ()
     let inserted  = doInsert empty
-    let result    = doRemove inserted
-    if not result.IsEmpty then
-      failwith "Expected to be empty"
 
-  let insertAndLookup () =
+    let insert () =
+      let result    = doInsert empty
+  #if DEBUG
+      if length result <> length inserted then
+        failwith "Expected to be same length as testSet"
+  #else
+      ()
+  #endif
+
+    let remove () =
+      let result    = doRemove inserted
+      if not result.IsEmpty then
+        failwith "Expected to be empty"
+
+    let insertAndRemove () =
+      let inserted  = doInsert empty
+      let result    = doRemove inserted
+      if not result.IsEmpty then
+        failwith "Expected to be empty"
+
+    let insertAndLookup () =
+      let inserted  = doInsert empty
+      let result    = doLookup removals inserted
+      if not result then
+        failwith "Expected true for all"
+
+    let lookupInserted () =
+      let result    = doLookup removals inserted
+      if not result then
+        failwith "Expected true for all"
+
+  module FSharpx =
+    open FSharpx.Collections
+
+    let inline doInsert hm =
+      inserts
+      |> Array.fold (fun s (k, v) -> s |> PersistentHashMap.add k v) hm
+
+    let inline doRemove hm =
+      inserts
+      |> Array.fold (fun s (k, _) -> s |> PersistentHashMap.remove k) hm
+
+    let inline doLookup fa hm =
+      fa
+      |> Array.forall (fun (k, _) -> hm |> PersistentHashMap.containsKey k)
+
+    let empty     = PersistentHashMap<Key, string>.Empty ()
     let inserted  = doInsert empty
-    let result    = doLookup removals inserted
-    if not result then
-      failwith "Expected true for all"
 
-  let lookupInserted () =
-    let result    = doLookup removals inserted
-    if not result then
-      failwith "Expected true for all"
+    let insert () =
+      let result    = doInsert empty
+      if result.Length <> inserted.Length then
+        failwith "Expected to be same length as testSet"
+
+    let remove () =
+      let result    = doRemove inserted
+      if result.Length <> 0 then
+        failwith "Expected to be empty"
+
+    let insertAndRemove () =
+      let inserted  = doInsert empty
+      let result    = doRemove inserted
+      if result.Length <> 0 then
+        failwith "Expected to be empty"
+
+    let insertAndLookup () =
+      let inserted  = doInsert empty
+      let result    = doLookup removals inserted
+      if not result then
+        failwith "Expected true for all"
+
+    let lookupInserted () =
+      let result    = doLookup removals inserted
+      if not result then
+        failwith "Expected true for all"
+
+  module SCI =
+    open System.Collections.Immutable 
+
+    let inline doInsert hm =
+      inserts
+      |> Array.fold (fun (s : ImmutableDictionary<_, _>) (k, v) -> (s.Remove k).Add (k, v)) hm
+
+    let inline doRemove hm =
+      inserts
+      |> Array.fold (fun (s : ImmutableDictionary<_, _>) (k, _) -> s.Remove k) hm
+
+    let inline doLookup fa (hm : ImmutableDictionary<_, _>) =
+      fa
+      |> Array.forall (fun (k, _) -> hm.ContainsKey k)
+
+    let empty     = ImmutableDictionary<Key, String>.Empty;
+    let inserted  = doInsert empty
+
+    let insert () =
+      let result    = doInsert empty
+      if result.Count <> inserted.Count then
+        failwith "Expected to be same length as testSet"
+
+    let remove () =
+      let result    = doRemove inserted
+      if result.Count <> 0 then
+        failwith "Expected to be empty"
+
+    let insertAndRemove () =
+      let inserted  = doInsert empty
+      let result    = doRemove inserted
+      if result.Count <> 0 then
+        failwith "Expected to be empty"
+
+    let insertAndLookup () =
+      let inserted  = doInsert empty
+      let result    = doLookup removals inserted
+      if not result then
+        failwith "Expected true for all"
+
+    let lookupInserted () =
+      let result    = doLookup removals inserted
+      if not result then
+        failwith "Expected true for all"
 
   let testCases =
     [|
-      "Lookup Inserted"     , lookupInserted
-      "Insert"              , insert
-      "Remove"              , remove
-//      "Insert & Lookup"     , insertAndLookup
-//      "Insert & Remove"     , insertAndRemove
+      "Local   - Lookup"  , PersistentHashMap.lookupInserted
+      "Local   - Insert"  , PersistentHashMap.insert
+      "Local   - Remove"  , PersistentHashMap.remove
+      "FSharpx - Lookup"  , FSharpx.lookupInserted
+      "FSharpx - Insert"  , FSharpx.insert
+      "FSharpx - Remove"  , FSharpx.remove
+      "SCI     - Lookup"  , SCI.lookupInserted
+      "SCI     - Insert"  , SCI.insert
+      "SCI     - Remove"  , SCI.remove
     |]
 
   let run () =
+    // printfn "%s" (inserted.ToString ())
     for nm, a in testCases do
       printfn "Running test case: %s..." nm
       let _, tm, cc0, cc1, cc2 = time outer a

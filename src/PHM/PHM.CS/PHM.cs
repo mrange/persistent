@@ -36,7 +36,7 @@ namespace PHM.CS
     bool                      CheckInvariant  ();
 #endif
     bool                      IsEmpty         { get; }
-    bool                      Visit           (Func<uint, K, V, bool> r);
+    bool                      Visit           (Func<K, V, bool> r);
     IPersistentHashMap<K, V>  Set             (K k, V v);
     bool                      TryFind         (K k, out V v);
     IPersistentHashMap<K, V>  Unset           (K k);
@@ -182,7 +182,7 @@ namespace PHM.CS
         }
       }
 
-      bool IPersistentHashMap<K, V>.Visit (Func<uint, K, V, bool> r)
+      bool IPersistentHashMap<K, V>.Visit (Func<K, V, bool> r)
       {
         if (r != null)
         {
@@ -220,7 +220,7 @@ namespace PHM.CS
       {
         var vs = new List<KeyValuePair<K, V>> (16);
 
-        Receive ((h,k,v) =>
+        Receive ((k,v) =>
           {
             var kv = new KeyValuePair<K, V> (k, v);
             vs.Add (kv);
@@ -256,7 +256,7 @@ namespace PHM.CS
       {
         return false;
       }
-      internal abstract bool            Receive         (Func<uint, K, V, bool> r);
+      internal abstract bool            Receive         (Func<K, V, bool> r);
       internal abstract BaseNode<K, V>  Set             (int s, KeyValueNode<K, V> n);
       internal abstract bool            TryFind         (uint h, int s, K k, out V v);
       internal abstract BaseNode<K, V>  Unset           (uint h, int s, K k);
@@ -281,7 +281,7 @@ namespace PHM.CS
         return true;
       }
 
-      internal override bool Receive (Func<uint, K, V, bool> r)
+      internal override bool Receive (Func<K, V, bool> r)
       {
         return true;
       }
@@ -330,9 +330,9 @@ namespace PHM.CS
       }
 #endif
 
-      internal override bool Receive (Func<uint, K, V, bool> r)
+      internal override bool Receive (Func<K, V, bool> r)
       {
-        return r (Hash, Key, Value);
+        return r (Key, Value);
       }
 
       internal sealed override BaseNode<K, V> Set (int s, KeyValueNode<K, V> n)
@@ -411,16 +411,17 @@ namespace PHM.CS
 
         var b1 = Bit (h1, s);
         var b2 = Bit (h2, s);
-        if (b1 == b2)
+        if (b1 < b2)
         {
-          return new BitmapNodeN<K, V> (b1, new [] { FromTwoNodes (s + TrieShift, h1, n1, h2, n2) });
+          return new BitmapNodeN<K, V> (b1 | b2, new [] { n1, n2 });
+        }
+        else if (b1 > b2)
+        {
+          return new BitmapNodeN<K, V> (b2 | b1, new [] { n2, n1 });
         }
         else
         {
-          return b1 < b2
-            ? new BitmapNodeN<K, V> (b1 | b2, new [] { n1, n2 })
-            : new BitmapNodeN<K, V> (b2 | b1, new [] { n2, n1 })
-            ;
+          return new BitmapNodeN<K, V> (b1, new [] { FromTwoNodes (s + TrieShift, h1, n1, h2, n2) });
         }
       }
 
@@ -478,7 +479,7 @@ namespace PHM.CS
       }
 #endif
 
-      internal override bool Receive (Func<uint, K, V, bool> r)
+      internal override bool Receive (Func<K, V, bool> r)
       {
         for (var iter = 0; iter < Nodes.Length; ++iter)
         {
@@ -607,12 +608,12 @@ namespace PHM.CS
       }
 #endif
 
-      internal override bool Receive (Func<uint, K, V, bool> r)
+      internal override bool Receive (Func<K, V, bool> r)
       {
         for (var iter = 0; iter < KeyValues.Length; ++iter)
         {
           var kv = KeyValues[iter];
-          if (!r (kv.Hash, kv.Key, kv.Value))
+          if (!r (kv.Key, kv.Value))
           {
             return false;
           }
