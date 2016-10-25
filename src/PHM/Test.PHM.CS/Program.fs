@@ -173,13 +173,6 @@ module PropertyTests =
       notIdentical expected actual
       && expected = actual
 
-    static member ``CopyArrayMakeHole copies the array and leaves a hole`` (CopyArrayMakeHoleTestData (holeBit, bitmap, vs)) =
-      let expected  = copyArrayMakeHole holeBit bitmap vs
-      let actual    = PersistentHashMap.CopyArrayMakeHole (holeBit, bitmap, vs)
-
-      notIdentical expected actual
-      && expected = actual
-
     static member ``PHM toArray must contain all added values`` (vs : (int*string) []) =
       let expected  = uniqueKey vs
       let phm       = vs |> fromArray
@@ -277,6 +270,7 @@ module PropertyTests =
     let config = { Config.Quick with MaxTest = testCount; MaxFail = testCount }
     Check.All<Properties>  config
 
+#if !DEBUG
 module PerformanceTests =
   open PHM.CS
 
@@ -340,7 +334,7 @@ module PerformanceTests =
 
   let random      = makeRandom 19740531
   let total       = 4000000
-  let outer       = 4000
+  let outer       = 40000
   let inner       = total / outer
   let multiplier  = 4
   let inserts     =
@@ -518,6 +512,7 @@ module PerformanceTests =
       printfn "Running test case: %s..." nm
       let _, tm, cc0, cc1, cc2 = time outer a
       printfn "...It took %d ms, CC=%d, %d, %d" tm cc0 cc1 cc2
+#endif
 
 [<EntryPoint>]
 let main argv =

@@ -100,18 +100,6 @@ namespace PHM.CS
       return (h & ((1 << s) - 1)) == ah;
     }
 
-    [MethodImpl (MethodImplOptions.AggressiveInlining)]
-    internal static int FindHoleIndex (uint holebit, uint bitmap)
-    {
-      var holemask  = holebit - 1;
-      var at        = 0;
-      for (; (bitmap & holemask) != 0; ++at)
-      {
-        bitmap &= bitmap - 1;
-      }
-      return at;
-    }
-
     // Note: Array.Copy seems significantly faster than for loops
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
@@ -131,12 +119,11 @@ namespace PHM.CS
     }
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
-    internal static T[] CopyArrayMakeHole<T> (uint holebit, uint bitmap, T[] vs)
+    internal static T[] CopyArrayMakeHole<T> (uint at, T[] vs)
     {
-      Debug.Assert ((holebit & bitmap) == 0);
-      Debug.Assert (PopCount (bitmap) == vs.Length);
+      Debug.Assert (at <= vs.Length);
+      Debug.Assert (vs.Length < TrieMaxNodes);
 
-      var at  = FindHoleIndex (holebit, bitmap);
       var nvs = new T[vs.Length + 1];
       Array.Copy (vs, nvs, at);
       Array.Copy (vs, at, nvs, at + 1, vs.Length - at);
@@ -144,25 +131,11 @@ namespace PHM.CS
     }
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
-    internal static T[] CopyArrayRemoveHole<T> (int at, T[] vs)
+    internal static T[] CopyArrayRemoveHole<T> (uint at, T[] vs)
     {
       Debug.Assert (at < vs.Length);
       Debug.Assert (vs.Length > 1);
 
-      var nvs = new T[vs.Length - 1];
-      Array.Copy (vs, nvs, at);
-      Array.Copy (vs, at + 1, nvs, at, vs.Length - at - 1);
-      return nvs;
-    }
-
-    [MethodImpl (MethodImplOptions.AggressiveInlining)]
-    internal static T[] CopyArrayRemoveHole<T> (uint holebit, uint bitmap, T[] vs)
-    {
-      Debug.Assert ((holebit & bitmap) != 0);
-      Debug.Assert (PopCount (bitmap) == vs.Length);
-      Debug.Assert (vs.Length > 0);
-
-      var at  = FindHoleIndex (holebit, bitmap);
       var nvs = new T[vs.Length - 1];
       Array.Copy (vs, nvs, at);
       Array.Copy (vs, at + 1, nvs, at, vs.Length - at - 1);
@@ -397,12 +370,6 @@ namespace PHM.CS
       }
 
       [MethodImpl (MethodImplOptions.AggressiveInlining)]
-      public static BitmapNodeN<K, V> FromNNodes (uint b, BaseNode<K, V>[] ns)
-      {
-        return new BitmapNodeN<K, V> (b, ns);
-      }
-
-      [MethodImpl (MethodImplOptions.AggressiveInlining)]
       public static BitmapNodeN<K, V> FromTwoNodes (int s, uint h1, BaseNode<K, V> n1, uint h2, BaseNode<K, V> n2)
       {
         // TODO: Does .Assert affect inlining?
@@ -506,7 +473,7 @@ namespace PHM.CS
         }
         else
         {
-          var nvs = CopyArrayMakeHole (bit, Bitmap, Nodes);
+          var nvs = CopyArrayMakeHole (localIdx, Nodes);
           nvs[localIdx] = n;
           return new BitmapNodeN<K, V> (Bitmap | bit, nvs);
         }
@@ -546,7 +513,7 @@ namespace PHM.CS
           }
           else if (Nodes.Length > 1)
           {
-            var nvs = CopyArrayRemoveHole (bit, Bitmap, Nodes);
+            var nvs = CopyArrayRemoveHole (localIdx, Nodes);
             return new BitmapNodeN<K, V> (Bitmap & ~bit, nvs);
           }
           else
@@ -677,7 +644,7 @@ namespace PHM.CS
       {
         if (Hash == h)
         {
-          for (var iter = 0; iter < KeyValues.Length; ++iter)
+          for (var iter = 0U; iter < KeyValues.Length; ++iter)
           {
             var kv = KeyValues[iter];
             if (kv.Key.Equals (k))
