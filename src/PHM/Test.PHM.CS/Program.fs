@@ -1,5 +1,5 @@
 // ----------------------------------------------------------------------------------------------
-// Copyright 2016 Mårten Rånge
+// Copyright 2016 MÃ¥rten RÃ¥nge
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -74,17 +74,17 @@ module PropertyTests =
 
     let set k v (phm : IPersistentHashMap<_, _>) = phm.Set (k, v)
 
-    let length (phm : IPersistentHashMap<_, _>) = 
+    let length (phm : IPersistentHashMap<_, _>) =
       let mutable l = 0
       let visitor _ _ = l <- l + 1; true
       phm.Visit (Func<_, _, _> visitor) |> ignore
       l
 
-    let uniqueKey vs = 
-      vs 
-      |> FsLinq.groupBy fst 
-      |> FsLinq.map (fun g -> g.Key, (g |> FsLinq.map snd |> FsLinq.last)) 
-      |> FsLinq.sortBy fst 
+    let uniqueKey vs =
+      vs
+      |> FsLinq.groupBy fst
+      |> FsLinq.map (fun g -> g.Key, (g |> FsLinq.map snd |> FsLinq.last))
+      |> FsLinq.sortBy fst
       |> FsLinq.toArray
 
     let fromArray kvs =
@@ -190,7 +190,7 @@ module PropertyTests =
           | false , false -> true
           | _     , _     -> false
 
-        let visitor k v = 
+        let visitor k v =
           match map |> Map.tryFind k with
           | Some fv -> v = fv
           | _       -> false
@@ -239,6 +239,14 @@ module PerformanceTests =
   open PHM.CS
 
   open System
+  open System.Diagnostics
+
+  type Checker () =
+    [<Conditional ("DEBUG")>]
+    static member check b str =
+      if not b then
+        printfn "Check failed: %s" str
+        failwith str
 
   // now () returns current time in milliseconds since start
   let now : unit -> int64 =
@@ -265,7 +273,7 @@ module PerformanceTests =
 
     v, (e - b), ecc0 - bcc0, ecc1 - bcc1, ecc2 - bcc2
 
-  let makeRandom (seed : int) = 
+  let makeRandom (seed : int) =
     let mutable state = int64 seed
     let m = 0x7FFFFFFFL // 2^31 - 1
     let d = 1. / float m
@@ -279,22 +287,22 @@ module PerformanceTests =
 
 // Key is reference type in order to not kill performance in collections that always boxes
 //  the key/value
-  type Key(v : int) =
-    member x.Value = v
+//  type Key(v : int) =
+//    member x.Value = v
+//
+//    interface IEquatable<Key> with
+//      member x.Equals(o : Key)  = v = o.Value
+//
+//    override x.Equals(o : obj)  =
+//      match o with
+//      | :? Key as k -> v = k.Value
+//      | _           -> false
+//    override x.GetHashCode()    = v
+//    override x.ToString()       = sprintf "%d" v
+//  let makeKey i = Key i
 
-    interface IEquatable<Key> with
-      member x.Equals(o : Key)  = v = o.Value
-
-    override x.Equals(o : obj)  =
-      match o with
-      | :? Key as k -> v = k.Value
-      | _           -> false
-    override x.GetHashCode()    = v
-    override x.ToString()       = sprintf "%d" v
-  let makeKey i = Key i
-
-//  type Key = int
-//  let makeKey i : int = i
+  type Key = int
+  let makeKey i : int = i
 
   let random      = makeRandom 19740531
   let total       = 4000000
@@ -307,7 +315,7 @@ module PerformanceTests =
     |]
   let removals  =
     let a = Array.copy inserts
-    for i in 0..(inner - 2) do 
+    for i in 0..(inner - 2) do
       let s =  random i inner
       let t =  a.[s]
       a.[s] <- a.[i]
@@ -315,7 +323,7 @@ module PerformanceTests =
     a
 
   module PersistentHashMap =
-    let length (phm : IPersistentHashMap<_, _>) = 
+    let length (phm : IPersistentHashMap<_, _>) =
       let mutable l = 0
       let visitor _ _ = l <- l + 1; true
       phm.Visit (Func<_, _, _> visitor) |> ignore
@@ -338,34 +346,25 @@ module PerformanceTests =
 
     let insert () =
       let result    = doInsert empty
-  #if DEBUG
-      if length result <> length inserted then
-        failwith "Expected to be same length as testSet"
-  #else
-      ()
-  #endif
+      Checker.check (length result = length inserted) "Expected to be same length as testSet"
 
     let remove () =
       let result    = doRemove inserted
-      if not result.IsEmpty then
-        failwith "Expected to be empty"
+      Checker.check result.IsEmpty "Expected to be empty"
 
     let insertAndRemove () =
       let inserted  = doInsert empty
       let result    = doRemove inserted
-      if not result.IsEmpty then
-        failwith "Expected to be empty"
+      Checker.check result.IsEmpty "Expected to be empty"
 
     let insertAndLookup () =
       let inserted  = doInsert empty
       let result    = doLookup removals inserted
-      if not result then
-        failwith "Expected true for all"
+      Checker.check result "Expected true for all"
 
     let lookupInserted () =
       let result    = doLookup removals inserted
-      if not result then
-        failwith "Expected true for all"
+      Checker.check result "Expected true for all"
 
   module FSharpx =
     open FSharpx.Collections
@@ -387,33 +386,28 @@ module PerformanceTests =
 
     let insert () =
       let result    = doInsert empty
-      if result.Length <> inserted.Length then
-        failwith "Expected to be same length as testSet"
+      Checker.check (result.Length = inserted.Length) "Expected to be same length as testSet"
 
     let remove () =
       let result    = doRemove inserted
-      if result.Length <> 0 then
-        failwith "Expected to be empty"
+      Checker.check (result.Length = 0) "Expected to be empty"
 
     let insertAndRemove () =
       let inserted  = doInsert empty
       let result    = doRemove inserted
-      if result.Length <> 0 then
-        failwith "Expected to be empty"
+      Checker.check (result.Length = 0) "Expected to be empty"
 
     let insertAndLookup () =
       let inserted  = doInsert empty
       let result    = doLookup removals inserted
-      if not result then
-        failwith "Expected true for all"
+      Checker.check result "Expected true for all"
 
     let lookupInserted () =
       let result    = doLookup removals inserted
-      if not result then
-        failwith "Expected true for all"
+      Checker.check result "Expected true for all"
 
   module SCI =
-    open System.Collections.Immutable 
+    open System.Collections.Immutable
 
     let inline doInsert hm =
       inserts
@@ -432,30 +426,25 @@ module PerformanceTests =
 
     let insert () =
       let result    = doInsert empty
-      if result.Count <> inserted.Count then
-        failwith "Expected to be same length as testSet"
+      Checker.check (result.Count = inserted.Count) "Expected to be same length as testSet"
 
     let remove () =
       let result    = doRemove inserted
-      if result.Count <> 0 then
-        failwith "Expected to be empty"
+      Checker.check (result.Count = 0) "Expected to be empty"
 
     let insertAndRemove () =
       let inserted  = doInsert empty
       let result    = doRemove inserted
-      if result.Count <> 0 then
-        failwith "Expected to be empty"
+      Checker.check (result.Count = 0) "Expected to be empty"
 
     let insertAndLookup () =
       let inserted  = doInsert empty
       let result    = doLookup removals inserted
-      if not result then
-        failwith "Expected true for all"
+      Checker.check result "Expected true for all"
 
     let lookupInserted () =
       let result    = doLookup removals inserted
-      if not result then
-        failwith "Expected true for all"
+      Checker.check result "Expected true for all"
 
   let testCases =
     [|
@@ -480,9 +469,13 @@ module PerformanceTests =
 
 [<EntryPoint>]
 let main argv =
-  PropertyTests.run ()
-#if !DEBUG
-  PerformanceTests.run ()
-#endif
-
-  0
+  try
+    PropertyTests.run ()
+  #if !DEBUG
+    PerformanceTests.run ()
+  #endif
+    0
+  with
+  | e ->
+    printfn "Caught: %s" e.Message
+    999
