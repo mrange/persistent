@@ -25,8 +25,6 @@ module PropertyTests =
   type Empty () =
     inherit obj ()
 
-  type CopyArrayMakeHoleTestData = CopyArrayMakeHoleTestData of uint32*uint32*Empty []
-
   module FsLinq =
     open System.Linq
 
@@ -48,10 +46,10 @@ module PropertyTests =
     let popCount v =
       let rec loop c v =
         if v <> 0u then
-          loop (c + 1u) (v &&& (v - 1u))
+          loop (c + 1) (v &&& (v - 1u))
         else
           c
-      loop 0u v
+      loop 0 v
 
     let copyArrayMakeHole holeBit bitmap (vs : 'T []) =
       check (holeBit <> 0u) "holeBit must bit be 0"
@@ -60,11 +58,11 @@ module PropertyTests =
       let lowCount  = popCount (bitmap &&& mask)
       let rec idLoop c i =
         if i < vs.Length then
-          if c = 0u then
+          if c = 0 then
             skipLoop i
           else
             nvs.[i] <- vs.[i]
-            idLoop (c - 1u) (i + 1)
+            idLoop (c - 1) (i + 1)
       and skipLoop i =
         if i < vs.Length then
           nvs.[i + 1] <- vs.[i]
@@ -108,40 +106,6 @@ module PropertyTests =
     let checkInvariant (phm : IPersistentHashMap<'K, 'V>) = phm.CheckInvariant ()
 
   open Common
-
-  type Generators =
-    static member CopyArrayMakeHoleData() =
-      // TODO: How to shrink
-      let g =
-        gen {
-          let! bitmap = Arb.generate<uint32>
-          let bitmap  =
-            if bitmap = 0xffffffffu then
-              0xfffffffeu // In order to leave a bit free
-            else
-              bitmap
-          let length  = popCount bitmap |> int
-          let! vs     = Gen.arrayOfLength length Arb.generate<Empty>
-          let! bitpos = Arb.generate<uint32>
-          let zbitpos = bitpos % (32u - uint32 length)|> int
-          let rec loop bp zbp bmp =
-            if zbp = 0 && (bmp &&& 1u) = 0u then
-              bp
-            elif (bmp &&& 1u) = 0u then
-              loop (bp + 1) (zbp - 1) (bmp >>> 1)
-            else
-              loop (bp + 1) zbp (bmp >>> 1)
-          let holeBit = 1u <<< loop 0 zbitpos bitmap
-          check (holeBit <> 0u)              "holeBit must not be zero"
-          check ((holeBit &&& bitmap) = 0u)  "holeBit must target empty pos in bitmap"
-          return CopyArrayMakeHoleTestData (holeBit, bitmap, vs)
-        }
-      { new Arbitrary<CopyArrayMakeHoleTestData> () with
-          member x.Generator  = g
-          member x.Shrinker t = Seq.empty
-      }
-
-  Arb.register<Generators> () |> ignore
 
   type ComplexType =
     | IntKey    of  int

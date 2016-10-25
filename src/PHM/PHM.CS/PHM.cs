@@ -68,14 +68,14 @@ namespace PHM.CS
     }
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
-    internal static uint PopCount (uint v)
+    internal static int PopCount (uint v)
     {
       // From: http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
       //  many cpus support popcount natively but that isn't available in IL
       v -=  ((v >> 1) & 0x55555555);
       v =   (v & 0x33333333) + ((v >> 2) & 0x33333333);
       v =   ((v + (v >> 4) & 0xF0F0F0F) * 0x1010101) >> 24;
-      return v;
+      return (int)v;
     }
 
     internal static string FormatWith (this string format, params object[] args)
@@ -119,7 +119,7 @@ namespace PHM.CS
     }
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
-    internal static T[] CopyArrayMakeHole<T> (uint at, T[] vs)
+    internal static T[] CopyArrayMakeHole<T> (int at, T[] vs)
     {
       Debug.Assert (at <= vs.Length);
       Debug.Assert (vs.Length < TrieMaxNodes);
@@ -131,7 +131,7 @@ namespace PHM.CS
     }
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
-    internal static T[] CopyArrayRemoveHole<T> (uint at, T[] vs)
+    internal static T[] CopyArrayRemoveHole<T> (int at, T[] vs)
     {
       Debug.Assert (at < vs.Length);
       Debug.Assert (vs.Length > 1);
@@ -644,7 +644,7 @@ namespace PHM.CS
       {
         if (Hash == h)
         {
-          for (var iter = 0U; iter < KeyValues.Length; ++iter)
+          for (var iter = 0; iter < KeyValues.Length; ++iter)
           {
             var kv = KeyValues[iter];
             if (kv.Key.Equals (k))
