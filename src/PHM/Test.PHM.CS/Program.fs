@@ -112,6 +112,22 @@ module PropertyTests =
     | StringKey of  int
     | TupleKey  of  int*string
 
+  type HalfHash(v : int) =
+    member x.Value = v
+
+    interface IComparable<HalfHash> with
+      member x.CompareTo(o : HalfHash)  = v.CompareTo o.Value
+
+    interface IEquatable<HalfHash> with
+      member x.Equals(o : HalfHash)  = v = o.Value
+
+    override x.Equals(o : obj)  =
+      match o with
+      | :? HalfHash as k -> v = k.Value
+      | _                -> false
+    override x.GetHashCode()    = (v.GetHashCode ()) >>> 16 // In order to get a fair bunch of duplicated hashes
+    override x.ToString()       = sprintf "%d" v
+
   type Action =
     | Add     of int*string
     | Remove  of int
@@ -162,7 +178,7 @@ module PropertyTests =
       checkInvariant phm
       && loop 0
 
-    static member ``PHM Unset on all added values must yield empty map`` (vs : (ComplexType*Empty) []) =
+    static member ``PHM Unset on all added values must yield empty map`` (vs : (HalfHash*Empty) []) =
       let unique    = uniqueKey vs
       let phm       = unique |> fromArray
 
@@ -229,7 +245,7 @@ module PropertyTests =
     let testCount = 1000
 #endif
 
-    Properties.``PHM toArray must contain all added values`` [|(13, null); (-3, ""); (0, "")|] |> printfn "Result: %A"
+//    Properties.``PHM toArray must contain all added values`` [|(13, null); (-3, ""); (0, "")|] |> printfn "Result: %A"
 
     let config = { Config.Quick with MaxTest = testCount; MaxFail = testCount }
     Check.All<Properties>  config
