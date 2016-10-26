@@ -482,7 +482,6 @@ namespace PHM.CS
       [MethodImpl (MethodImplOptions.AggressiveInlining)]
       public static BaseNode<K, V> FromTwoNodes (int s, uint h1, BaseNode<K, V> n1, uint h2, BaseNode<K, V> n2)
       {
-        // TODO: Does .Assert affect inlining?
         Debug.Assert (h1 != h2);
         Debug.Assert (s < TrieMaxShift);
 
