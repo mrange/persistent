@@ -229,7 +229,7 @@ module PropertyTests =
     let testCount = 1000
 #endif
 
-  //  Properties.``PHM TryFind must return all added values`` [|(StringKey -34, TupleKey (0,"")); (IntKey 30, IntKey 0)|] |> printfn "Result: %A"
+    Properties.``PHM toArray must contain all added values`` [|(13, null); (-3, ""); (0, "")|] |> printfn "Result: %A"
 
     let config = { Config.Quick with MaxTest = testCount; MaxFail = testCount }
     Check.All<Properties>  config
@@ -451,12 +451,12 @@ module PerformanceTests =
       "Local   - Lookup"  , PersistentHashMap.lookupInserted
       "Local   - Insert"  , PersistentHashMap.insert
       "Local   - Remove"  , PersistentHashMap.remove
-      "FSharpx - Lookup"  , FSharpx.lookupInserted
-      "FSharpx - Insert"  , FSharpx.insert
-      "FSharpx - Remove"  , FSharpx.remove
-      "SCI     - Lookup"  , SCI.lookupInserted
-      "SCI     - Insert"  , SCI.insert
-      "SCI     - Remove"  , SCI.remove
+//      "FSharpx - Lookup"  , FSharpx.lookupInserted
+//      "FSharpx - Insert"  , FSharpx.insert
+//      "FSharpx - Remove"  , FSharpx.remove
+//      "SCI     - Lookup"  , SCI.lookupInserted
+//      "SCI     - Insert"  , SCI.insert
+//      "SCI     - Remove"  , SCI.remove
     |]
 
   let run () =
@@ -470,7 +470,7 @@ module PerformanceTests =
 [<EntryPoint>]
 let main argv =
   try
-    PropertyTests.run ()
+//    PropertyTests.run ()
   #if !DEBUG
     PerformanceTests.run ()
   #endif

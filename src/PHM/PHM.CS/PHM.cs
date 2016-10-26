@@ -356,6 +356,118 @@ namespace PHM.CS
       }
     }
 
+    internal sealed partial class BitmapNode1<K, V> : BaseNode<K, V>
+      where K : IEquatable<K>
+    {
+      public readonly uint              Bitmap  ;
+      public readonly BaseNode<K, V>    Node    ;
+
+      [MethodImpl (MethodImplOptions.AggressiveInlining)]
+      public BitmapNode1 (uint b, BaseNode<K, V> n)
+      {
+        Bitmap  = b ;
+        Node    = n ;
+      }
+
+#if TEST_BUILD
+      internal override bool CheckInvariant (uint h, int s)
+      {
+        if (PopCount (Bitmap) != 1)
+        {
+          return false;
+        }
+
+        var bitmap = Bitmap;
+
+        var localIdx = PopCount (Bitmap - 1);
+
+        if (!Node.CheckInvariant (h | (uint)(localIdx << s), s + TrieShift))
+        {
+          return false;
+        }
+
+        return true;
+      }
+
+      internal override void Describe (StringBuilder sb, int indent)
+      {
+        var bits = Convert.ToString (Bitmap, 2);
+        sb.FormatIndentedLine (indent, "Bitmap1 Bitmap:0b{0}", new string ('0', 16 - bits.Length) + bits);
+        Node.Describe (sb, indent + 2);
+      }
+#endif
+
+      internal override bool Receive (Func<K, V, bool> r)
+      {
+        if (!Node.Receive (r))
+        {
+          return false;
+        }
+
+        return true;
+      }
+
+      internal sealed override BaseNode<K, V> Set (int s, KeyValueNode<K, V> n)
+      {
+        var h = n.Hash;
+        var bit = Bit (h, s);
+        if ((bit & Bitmap) != 0)
+        {
+          var nv = Node.Set (s + TrieShift, n);
+          return new BitmapNode1<K, V> (Bitmap, nv);
+        }
+        else if (Bitmap < bit)
+        {
+          return new BitmapNodeN<K,V> (Bitmap | bit, new BaseNode<K, V> [] { Node, n });
+        }
+        else
+        {
+          return new BitmapNodeN<K,V> (bit | Bitmap, new BaseNode<K, V> [] { n, Node });
+        }
+      }
+
+      internal sealed override bool TryFind (uint h, int s, K k, out V v)
+      {
+        var bit = Bit (h, s);
+        if ((bit & Bitmap) != 0)
+        {
+          return Node.TryFind (h, s + TrieShift, k, out v);
+        }
+        else
+        {
+          v = default (V);
+          return false;
+        }
+      }
+
+      internal sealed override BaseNode<K, V> Unset (uint h, int s, K k)
+      {
+        var bit = Bit (h, s);
+        if ((bit & Bitmap) != 0)
+        {
+          var localIdx  = PopCount (Bitmap & (bit - 1));
+          var updated   = Node.Unset (h, s + TrieShift, k);
+          if (updated == Node)
+          {
+            return this;
+          }
+          else if (updated != null)
+          {
+            return new BitmapNode1<K, V> (Bitmap, updated);
+          }
+          else
+          {
+            return null;
+          }
+        }
+        else
+        {
+          return this;
+        }
+      }
+
+    }
+
     internal sealed partial class BitmapNodeN<K, V> : BaseNode<K, V>
       where K : IEquatable<K>
     {
@@ -370,7 +482,7 @@ namespace PHM.CS
       }
 
       [MethodImpl (MethodImplOptions.AggressiveInlining)]
-      public static BitmapNodeN<K, V> FromTwoNodes (int s, uint h1, BaseNode<K, V> n1, uint h2, BaseNode<K, V> n2)
+      public static BaseNode<K, V> FromTwoNodes (int s, uint h1, BaseNode<K, V> n1, uint h2, BaseNode<K, V> n2)
       {
         // TODO: Does .Assert affect inlining?
         Debug.Assert (h1 != h2);
@@ -388,7 +500,7 @@ namespace PHM.CS
         }
         else
         {
-          return new BitmapNodeN<K, V> (b1, new [] { FromTwoNodes (s + TrieShift, h1, n1, h2, n2) });
+          return new BitmapNode1<K, V> (b1, FromTwoNodes (s + TrieShift, h1, n1, h2, n2));
         }
       }
 
@@ -437,7 +549,7 @@ namespace PHM.CS
       internal override void Describe (StringBuilder sb, int indent)
       {
         var bits = Convert.ToString (Bitmap, 2);
-        sb.FormatIndentedLine (indent, "Bitmap Bitmap:0b{0}, Nodes:{1}", new string ('0', 16 - bits.Length) + bits, Nodes.Length);
+        sb.FormatIndentedLine (indent, "BitmapN Bitmap:0b{0}, Nodes:{1}", new string ('0', 16 - bits.Length) + bits, Nodes.Length);
         for (var iter = 0; iter < Nodes.Length; ++iter)
         {
           var n = Nodes[iter];
@@ -511,10 +623,14 @@ namespace PHM.CS
             nvs[localIdx] = updated;
             return new BitmapNodeN<K, V> (Bitmap, nvs);
           }
-          else if (Nodes.Length > 1)
+          else if (Nodes.Length > 2)
           {
             var nvs = CopyArrayRemoveHole (localIdx, Nodes);
             return new BitmapNodeN<K, V> (Bitmap & ~bit, nvs);
+          }
+          else if (Nodes.Length == 2)
+          {
+            return new BitmapNode1<K, V> (Bitmap & ~bit, Nodes[(localIdx) + 1 & 0x1]);
           }
           else
           {
