@@ -26,13 +26,12 @@ namespace PHM.CS
   using System.Diagnostics;
   using System.Globalization;
   using System.Runtime.CompilerServices;
-  using System.Runtime.InteropServices;
   using System.Text;
 
-  public partial interface IPersistentHashMap<K, V> : IEnumerable<KeyValuePair<K, V>>
+  partial interface IPersistentHashMap<K, V> : IEnumerable<KeyValuePair<K, V>>
     where K : IEquatable<K>
   {
-#if TEST_BUILD
+#if PHM_TEST_BUILD
     bool                      CheckInvariant  ();
 #endif
     bool                      IsEmpty         { get; }
@@ -42,7 +41,7 @@ namespace PHM.CS
     IPersistentHashMap<K, V>  Unset           (K k);
   }
 
-  public static partial class PersistentHashMap
+  static partial class PersistentHashMap
   {
     public static IPersistentHashMap<K, V> Empty<K, V> ()
       where K : IEquatable<K>
@@ -182,7 +181,7 @@ namespace PHM.CS
         return Unset ((uint)k.GetHashCode (), 0, k) ?? EmptyNode;
       }
 
-#if TEST_BUILD
+#if PHM_TEST_BUILD
       bool IPersistentHashMap<K ,V>.CheckInvariant ()
       {
         return CheckInvariant (0, 0);
@@ -212,7 +211,7 @@ namespace PHM.CS
         return GetEnumerator ();
       }
 
-      #if TEST_BUILD
+      #if PHM_TEST_BUILD
       public override string ToString ()
       {
         var sb = new StringBuilder (16);
@@ -221,7 +220,7 @@ namespace PHM.CS
       }
 #endif
 
-#if TEST_BUILD
+#if PHM_TEST_BUILD
       internal abstract bool            CheckInvariant  (uint h, int s);
       internal abstract void            Describe        (StringBuilder sb, int indent);
 #endif
@@ -238,7 +237,7 @@ namespace PHM.CS
     internal sealed partial class EmptyNode<K, V> : BaseNode<K, V>
       where K : IEquatable<K>
     {
-#if TEST_BUILD
+#if PHM_TEST_BUILD
       internal override bool CheckInvariant (uint h, int s)
       {
         return true;
@@ -291,7 +290,7 @@ namespace PHM.CS
         Value = v;
       }
 
-#if TEST_BUILD
+#if PHM_TEST_BUILD
       internal override bool CheckInvariant (uint h, int s)
       {
         return CheckHash (Hash, h, s) && (Hash == (uint)Key.GetHashCode ());
@@ -369,7 +368,7 @@ namespace PHM.CS
         Node    = n ;
       }
 
-#if TEST_BUILD
+#if PHM_TEST_BUILD
       internal override bool CheckInvariant (uint h, int s)
       {
         if (PopCount (Bitmap) != 1)
@@ -504,7 +503,7 @@ namespace PHM.CS
         }
       }
 
-#if TEST_BUILD
+#if PHM_TEST_BUILD
       internal override bool CheckInvariant (uint h, int s)
       {
         if (PopCount (Bitmap) != Nodes.Length)
@@ -664,7 +663,7 @@ namespace PHM.CS
         return new HashCollisionNodeN<K, V> (h, new [] { kv1, kv2 });
       }
 
-#if TEST_BUILD
+#if PHM_TEST_BUILD
       internal override bool CheckInvariant (uint h, int s)
       {
         for (var iter = 0; iter < KeyValues.Length; ++iter)
