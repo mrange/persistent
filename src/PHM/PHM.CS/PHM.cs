@@ -630,7 +630,7 @@ namespace PHM.CS
           }
           else if (Nodes.Length == 2)
           {
-            return new BitmapNode1<K, V> (Bitmap & ~bit, Nodes[(localIdx) + 1 & 0x1]);
+            return new BitmapNode1<K, V> (Bitmap & ~bit, Nodes[localIdx ^ 0x1]);
           }
           else
           {
@@ -765,11 +765,14 @@ namespace PHM.CS
             var kv = KeyValues[iter];
             if (kv.Key.Equals (k))
             {
-              // TODO: Case for .Length == 2
-              if (KeyValues.Length > 1)
+              if (KeyValues.Length > 2)
               {
                 var rvs = CopyArrayRemoveHole (iter, KeyValues);
                 return new HashCollisionNodeN<K, V> (h, rvs);
+              }
+              if (KeyValues.Length == 2)
+              {
+                return KeyValues[iter ^ 0x1];
               }
               else
               {
