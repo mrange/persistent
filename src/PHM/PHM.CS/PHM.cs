@@ -189,23 +189,7 @@ namespace PHM.CS
       }
 #endif
 
-      public IEnumerator<KeyValuePair<K, V>> GetEnumerator ()
-      {
-        var vs = new List<KeyValuePair<K, V>> (16);
-
-        Receive ((k,v) =>
-          {
-            var kv = new KeyValuePair<K, V> (k, v);
-            vs.Add (kv);
-            return true;
-          });
-
-        for (var iter = 0; iter < vs.Count; ++iter)
-        {
-          var v = vs[iter];
-          yield return v;
-        }
-      }
+      public abstract IEnumerator<KeyValuePair<K, V>> GetEnumerator();
 
       IEnumerator IEnumerable.GetEnumerator ()
       {
@@ -238,6 +222,11 @@ namespace PHM.CS
     internal sealed partial class EmptyNode<K, V> : BaseNode<K, V>
       where K : IEquatable<K>
     {
+      public override IEnumerator<KeyValuePair<K, V>> GetEnumerator()
+      {
+        yield break;
+      }
+
 #if PHM_TEST_BUILD
       internal override bool CheckInvariant (uint h, int s)
       {
@@ -289,6 +278,11 @@ namespace PHM.CS
         Hash  = h;
         Key   = k;
         Value = v;
+      }
+
+      public override IEnumerator<KeyValuePair<K, V>> GetEnumerator()
+      {
+        yield return new KeyValuePair<K, V> (Key, Value);
       }
 
 #if PHM_TEST_BUILD
@@ -366,6 +360,14 @@ namespace PHM.CS
       {
         Bitmap  = b ;
         Node    = n ;
+      }
+
+      public override IEnumerator<KeyValuePair<K, V>> GetEnumerator()
+      {
+        foreach (var kv in Node)
+        {
+          yield return kv;
+        }
       }
 
 #if PHM_TEST_BUILD
@@ -498,6 +500,17 @@ namespace PHM.CS
         else
         {
           return new BitmapNode1<K, V> (b1, FromTwoNodes (s + TrieShift, h1, n1, h2, n2));
+        }
+      }
+
+      public override IEnumerator<KeyValuePair<K, V>> GetEnumerator()
+      {
+        foreach (var node in Nodes)
+        {
+          foreach (var kv in node)
+          {
+            yield return kv;
+          }
         }
       }
 
@@ -658,6 +671,14 @@ namespace PHM.CS
       public static HashCollisionNodeN<K, V> FromTwoNodes (uint h, KeyValueNode<K, V> kv1, KeyValueNode<K, V> kv2)
       {
         return new HashCollisionNodeN<K, V> (h, new [] { kv1, kv2 });
+      }
+
+      public override IEnumerator<KeyValuePair<K, V>> GetEnumerator()
+      {
+        foreach (var kv in KeyValues)
+        {
+          yield return new KeyValuePair<K, V> (kv.Key, kv.Value);
+        }
       }
 
 #if PHM_TEST_BUILD
