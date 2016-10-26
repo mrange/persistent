@@ -168,7 +168,8 @@ namespace PHM.CS
 
       IPersistentHashMap<K, V> IPersistentHashMap<K ,V>.Set (K k, V v)
       {
-        return Set (0, new KeyValueNode<K, V> ((uint)k.GetHashCode (), k, v));
+        var h = (uint)k.GetHashCode ();
+        return Set (h, 0, new KeyValueNode<K, V> (h, k, v));
       }
 
       bool IPersistentHashMap<K ,V>.TryFind (K k, out V v)
@@ -229,7 +230,7 @@ namespace PHM.CS
         return false;
       }
       internal abstract bool            Receive         (Func<K, V, bool> r);
-      internal abstract BaseNode<K, V>  Set             (int s, KeyValueNode<K, V> n);
+      internal abstract BaseNode<K, V>  Set             (uint h, int s, KeyValueNode<K, V> n);
       internal abstract bool            TryFind         (uint h, int s, K k, out V v);
       internal abstract BaseNode<K, V>  Unset           (uint h, int s, K k);
     }
@@ -258,7 +259,7 @@ namespace PHM.CS
         return true;
       }
 
-      internal sealed override BaseNode<K, V> Set (int s, KeyValueNode<K, V> n)
+      internal sealed override BaseNode<K, V> Set (uint h, int s, KeyValueNode<K, V> n)
       {
         return n;
       }
@@ -307,12 +308,11 @@ namespace PHM.CS
         return r (Key, Value);
       }
 
-      internal sealed override BaseNode<K, V> Set (int s, KeyValueNode<K, V> n)
+      internal sealed override BaseNode<K, V> Set (uint h, int s, KeyValueNode<K, V> n)
       {
         // TODO: Optimize if h,k and v are identical?
 
         // No need to check for reference equality as parent always creates new KeyValueNode
-        var h = n.Hash;
         if (Hash == h && Key.Equals (n.Key))
         {
           // Replaces current node
@@ -406,13 +406,12 @@ namespace PHM.CS
         return true;
       }
 
-      internal sealed override BaseNode<K, V> Set (int s, KeyValueNode<K, V> n)
+      internal sealed override BaseNode<K, V> Set (uint h, int s, KeyValueNode<K, V> n)
       {
-        var h = n.Hash;
         var bit = Bit (h, s);
         if ((bit & Bitmap) != 0)
         {
-          var nv = Node.Set (s + TrieShift, n);
+          var nv = Node.Set (h, s + TrieShift, n);
           return new BitmapNode1<K, V> (Bitmap, nv);
         }
         else if (Bitmap < bit)
@@ -571,15 +570,14 @@ namespace PHM.CS
         return true;
       }
 
-      internal sealed override BaseNode<K, V> Set (int s, KeyValueNode<K, V> n)
+      internal sealed override BaseNode<K, V> Set (uint h, int s, KeyValueNode<K, V> n)
       {
-        var h = n.Hash;
         var bit = Bit (h, s);
         var localIdx = PopCount (Bitmap & (bit - 1));
         if ((bit & Bitmap) != 0)
         {
           var nvs = CopyArray (Nodes);
-          nvs[localIdx] = Nodes[localIdx].Set (s + TrieShift, n);
+          nvs[localIdx] = Nodes[localIdx].Set (h, s + TrieShift, n);
           return new BitmapNodeN<K, V> (Bitmap, nvs);
         }
         else
@@ -704,9 +702,8 @@ namespace PHM.CS
         return true;
       }
 
-      internal sealed override BaseNode<K, V> Set (int s, KeyValueNode<K, V> n)
+      internal sealed override BaseNode<K, V> Set (uint h, int s, KeyValueNode<K, V> n)
       {
-        var h = n.Hash;
         if (Hash == h)
         {
           var k = n.Key;
