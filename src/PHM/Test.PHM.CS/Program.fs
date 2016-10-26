@@ -451,12 +451,12 @@ module PerformanceTests =
       "Local   - Lookup"  , PersistentHashMap.lookupInserted
       "Local   - Insert"  , PersistentHashMap.insert
       "Local   - Remove"  , PersistentHashMap.remove
-//      "FSharpx - Lookup"  , FSharpx.lookupInserted
-//      "FSharpx - Insert"  , FSharpx.insert
-//      "FSharpx - Remove"  , FSharpx.remove
-//      "SCI     - Lookup"  , SCI.lookupInserted
-//      "SCI     - Insert"  , SCI.insert
-//      "SCI     - Remove"  , SCI.remove
+      "FSharpx - Lookup"  , FSharpx.lookupInserted
+      "FSharpx - Insert"  , FSharpx.insert
+      "FSharpx - Remove"  , FSharpx.remove
+      "SCI     - Lookup"  , SCI.lookupInserted
+      "SCI     - Insert"  , SCI.insert
+      "SCI     - Remove"  , SCI.remove
     |]
 
   let run () =
@@ -470,7 +470,7 @@ module PerformanceTests =
 [<EntryPoint>]
 let main argv =
   try
-//    PropertyTests.run ()
+    PropertyTests.run ()
   #if !DEBUG
     PerformanceTests.run ()
   #endif
