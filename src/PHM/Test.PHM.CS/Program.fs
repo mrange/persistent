@@ -312,6 +312,15 @@ module PerformanceTests =
   type Key(v : int) =
     member x.Value = v
 
+    interface IComparable with
+      member x.CompareTo(o : obj) =
+        match o with
+        | :? Key as k -> v.CompareTo (k.Value)
+        | _           -> -1
+
+    interface IComparable<Key> with
+      member x.CompareTo(o : Key) = v.CompareTo (o.Value)
+
     interface IEquatable<Key> with
       member x.Equals(o : Key)  = v = o.Value
 
@@ -378,6 +387,45 @@ module PerformanceTests =
       let inserted  = doInsert empty
       let result    = doRemove inserted
       Checker.check result.IsEmpty "Expected to be empty"
+
+    let insertAndLookup () =
+      let inserted  = doInsert empty
+      let result    = doLookup removals inserted
+      Checker.check result "Expected true for all"
+
+    let lookupInserted () =
+      let result    = doLookup removals inserted
+      Checker.check result "Expected true for all"
+
+  module Map =
+
+    let inline doInsert hm =
+      inserts
+      |> Array.fold (fun s (k, v) -> s |> Map.add k v) hm
+
+    let inline doRemove hm =
+      inserts
+      |> Array.fold (fun s (k, _) -> s |> Map.remove k) hm
+
+    let inline doLookup fa hm =
+      fa
+      |> Array.forall (fun (k, _) -> hm |> Map.containsKey k)
+
+    let empty     = Map.empty
+    let inserted  = doInsert empty
+
+    let insert () =
+      let result    = doInsert empty
+      Checker.check (result.Count = inserted.Count) "Expected to be same length as testSet"
+
+    let remove () =
+      let result    = doRemove inserted
+      Checker.check (result.Count = 0) "Expected to be empty"
+
+    let insertAndRemove () =
+      let inserted  = doInsert empty
+      let result    = doRemove inserted
+      Checker.check (result.Count = 0) "Expected to be empty"
 
     let insertAndLookup () =
       let inserted  = doInsert empty
@@ -479,6 +527,9 @@ module PerformanceTests =
       "SCI     - Lookup"  , SCI.lookupInserted
       "SCI     - Insert"  , SCI.insert
       "SCI     - Remove"  , SCI.remove
+      "Map     - Lookup"  , Map.lookupInserted
+      "Map     - Insert"  , Map.insert
+      "Map     - Remove"  , Map.remove
     |]
 
   let run () =
