@@ -466,7 +466,6 @@ namespace PHM.CS
           return this;
         }
       }
-
     }
 
     internal sealed partial class BitmapNodeN<K, V> : BaseNode<K, V>
@@ -596,7 +595,14 @@ namespace PHM.CS
         else
         {
           var nvs = CopyArrayMakeHole (localIdx, Nodes, n);
-          return new BitmapNodeN<K, V> (Bitmap | bit, nvs);
+          if (nvs.Length < TrieMaxNodes)
+          {
+            return new BitmapNodeN<K, V> (Bitmap | bit, nvs);
+          }
+          else
+          {
+            return new BitmapNode16<K, V> (nvs);
+          }
         }
       }
 
@@ -651,7 +657,115 @@ namespace PHM.CS
           return this;
         }
       }
+    }
 
+    internal sealed partial class BitmapNode16<K, V> : BaseNode<K, V>
+      where K : IEquatable<K>
+    {
+      public readonly BaseNode<K, V>[]  Nodes   ;
+
+      [MethodImpl (MethodImplOptions.AggressiveInlining)]
+      public BitmapNode16 (BaseNode<K, V>[] ns)
+      {
+        Nodes   = ns ;
+      }
+
+      public override IEnumerator<KeyValuePair<K, V>> GetEnumerator()
+      {
+        foreach (var node in Nodes)
+        {
+          foreach (var kv in node)
+          {
+            yield return kv;
+          }
+        }
+      }
+
+#if PHM_TEST_BUILD
+      internal override bool CheckInvariant (uint h, int s)
+      {
+        if (TrieMaxNodes != Nodes.Length)
+        {
+          return false;
+        }
+
+        for (var iter = 0; iter < TrieMaxNodes; ++iter)
+        {
+          var n = Nodes[iter];
+          if (n == null)
+          {
+            return false;
+          }
+
+          if (!n.CheckInvariant (h | (uint)(iter << s), s + TrieShift))
+          {
+            return false;
+          }
+        }
+
+        return true;
+      }
+
+      internal override void Describe (StringBuilder sb, int indent)
+      {
+        sb.IndentedLine (indent, "Bitmap16");
+        foreach (var node in Nodes)
+        {
+          node.Describe (sb, indent + 2);
+        }
+      }
+#endif
+
+      internal override bool Receive (Func<K, V, bool> r)
+      {
+        foreach (var node in Nodes)
+        {
+          if (!node.Receive (r))
+          {
+            return false;
+          }
+        }
+
+        return true;
+      }
+
+      internal sealed override BaseNode<K, V> Set (uint h, int s, KeyValueNode<K, V> n)
+      {
+        var localIdx  = (int)LocalHash (h, s);
+        var nv        = Nodes[localIdx].Set (h, s + TrieShift, n) ;
+        var nvs       = CopyArray (Nodes);
+        nvs[localIdx] = nv;
+        return new BitmapNode16<K, V> (nvs);
+      }
+
+      internal sealed override bool TryFind (uint h, int s, K k, out V v)
+      {
+        var localIdx  = (int)LocalHash (h, s);
+        return Nodes[localIdx].TryFind (h, s + TrieShift, k, out v);
+      }
+
+      internal sealed override BaseNode<K, V> Unset (uint h, int s, K k)
+      {
+        var localIdx  = (int)LocalHash (h, s);
+        var updated   = Nodes[localIdx].Unset (h, s + TrieShift, k);
+        if (updated == Nodes[localIdx])
+        {
+          return this;
+        }
+        else if (updated != null)
+        {
+          var nv        = Nodes[localIdx] ;
+          var nvs       = CopyArray (Nodes);
+          nvs[localIdx] = updated;
+          return new BitmapNode16<K, V> (nvs);
+        }
+        else
+        {
+          var bit = Bit (h, s);
+          var nvs = CopyArrayRemoveHole (localIdx, Nodes);
+          return new BitmapNodeN<K, V> (TrieMask & ~bit, nvs);
+        }
+      }
     }
 
     internal sealed partial class HashCollisionNodeN<K, V> : BaseNode<K, V>

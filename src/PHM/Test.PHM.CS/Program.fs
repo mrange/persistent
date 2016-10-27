@@ -482,7 +482,7 @@ module PerformanceTests =
     |]
 
   let run () =
-    // printfn "%s" (inserted.ToString ())
+    // printfn "%s" (PersistentHashMap.inserted.ToString ())
     for nm, a in testCases do
       printfn "Running test case: %s..." nm
       let _, tm, cc0, cc1, cc2 = time outer a
