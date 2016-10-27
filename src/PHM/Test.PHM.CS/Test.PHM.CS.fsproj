@@ -111,6 +111,11 @@
       <Project>{6dee0f5b-4dc7-48c1-8672-38d7c1d34952}</Project>
       <Private>True</Private>
     </ProjectReference>
+    <ProjectReference Include="..\PHM\PHM.fsproj">
+      <Name>PHM</Name>
+      <Project>{33d78760-29fa-4cda-b8f2-a1671a87ed4f}</Project>
+      <Private>True</Private>
+    </ProjectReference>
   </ItemGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
