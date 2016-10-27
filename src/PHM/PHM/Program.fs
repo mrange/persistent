@@ -49,10 +49,6 @@ module PropertyTests =
     vs |> Array.sortInPlaceBy fst
     vs
 
-  let checkInvariant (phm : PersistentHashMap<'K, 'V>) =
-    // TODO:
-    true
-
   let notIdentical<'T when 'T : not struct> (f : 'T) (s : 'T) = obj.ReferenceEquals (f, s) |> not
 
   type ComplexType =
@@ -87,7 +83,7 @@ module PropertyTests =
       let actual    = phm |> toSortedKeyArray
 
       notIdentical expected actual
-      && checkInvariant phm
+      && PersistentHashMap.checkInvariant phm
       && expected = actual
 
     static member ``PHM TryFind must return all added values`` (vs : (ComplexType*ComplexType) []) =
@@ -103,34 +99,33 @@ module PropertyTests =
         else
           true
 
-      checkInvariant phm
+      PersistentHashMap.checkInvariant phm
       && loop 0
 
-(*
-    static member ``PHM Unset on all added values must yield empty map`` (vs : (HalfHash*Empty) []) =
+    static member ``PHM Unset on all added values must yield empty map`` (vs : (HalfHash*int) []) =
       let unique    = uniqueKey vs
       let phm       = unique |> fromArray
 
       let rec loop (phm : PersistentHashMap<_, _>) i =
-        if checkInvariant phm |> not then
+        if PersistentHashMap.checkInvariant phm |> not then
           None
         elif i < unique.Length then
           if phm |> PersistentHashMap.isEmpty then
             None
           else
             let k, v = unique.[i]
-            loop (phm.Unset k) (i + 1)
+            loop (PersistentHashMap.unset k phm) (i + 1)
         else
           Some phm
 
       match loop phm 0 with
-      | Some phm  -> phm.IsEmpty
+      | Some phm  -> PersistentHashMap.isEmpty phm
       | None      -> false
 
     static member ``PHM should behave as Map`` (vs : Action []) =
-      let compare map (phm : IPersistentHashMap<_, _>) =
+      let compare map (phm : PersistentHashMap<_, _>) =
         let empty =
-          match map |> Map.isEmpty, phm.IsEmpty with
+          match map |> Map.isEmpty, phm |> PersistentHashMap.isEmpty with
           | true  , true
           | false , false -> true
           | _     , _     -> false
@@ -140,17 +135,20 @@ module PropertyTests =
           | Some fv -> v = fv
           | _       -> false
 
-        checkInvariant phm && (length phm = map.Count) && empty && phm.Visit (Func<_, _, _> visitor)
+        PersistentHashMap.checkInvariant phm
+        && (PersistentHashMap.length phm = map.Count)
+        && empty
+        && PersistentHashMap.visitKeyValues visitor phm
 
       let ra = ResizeArray<int> ()
 
-      let rec loop map (phm : IPersistentHashMap<_, _>) i =
+      let rec loop map (phm : PersistentHashMap<_, _>) i =
         if i < vs.Length then
           match vs.[i] with
           | Add (k, v)  ->
             ra.Add k
             let map = map |> Map.add k v
-            let phm = phm.Set (k, v)
+            let phm = PersistentHashMap.set k v phm
             compare map phm && loop map phm (i + 1)
           | Remove r    ->
             if ra.Count > 0 then
@@ -158,15 +156,14 @@ module PropertyTests =
               let k   = ra.[r]
               ra.RemoveAt r
               let map = map |> Map.remove k
-              let phm = phm.Unset k
+              let phm = PersistentHashMap.unset k phm
               compare map phm && loop map phm (i + 1)
             else
               loop map phm (i + 1)
         else
           true
 
-      loop Map.empty (empty ()) 0
-*)
+      loop Map.empty PersistentHashMap.empty 0
 
   open FsCheck
 
@@ -177,8 +174,11 @@ module PropertyTests =
     let testCount = 1000
 #endif
 
+    //Properties.``PHM toArray must contain all added values`` [|(1, "")|] |> printfn "%A"
+
     let config = { Config.Quick with MaxTest = testCount; MaxFail = testCount }
-    Check.All<Properties>  config
+    Check.All<Properties> config
+    ()
 
 [<EntryPoint>]
 let main argv =

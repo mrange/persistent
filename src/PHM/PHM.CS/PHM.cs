@@ -69,6 +69,7 @@ namespace PHM.CS
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     internal static int PopCount (uint v)
     {
+      // TODO: As we only need popcount for 16bits can this be optimized?
       // From: http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
       //  many cpus support popcount natively but that isn't available in IL
       v -=  ((v >> 1) & 0x55555555);

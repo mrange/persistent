@@ -16,9 +16,9 @@
 module Persistent
 
 type PersistentHashMap<'K, 'V when 'K :> System.IEquatable<'K>>  =
-  | Empty
   | BitmapN         of uint32*PersistentHashMap<'K, 'V> []
   | KeyValue        of uint32*'K*'V
+  | Empty
   | HashCollisionN  of uint32*('K*'V) []
 
 module PersistentHashMap =
@@ -34,9 +34,9 @@ module PersistentHashMap =
     [<Literal>]
     let TrieMask      = 15u // maxNodes - 1
 
-    let inline localHash  h s : uint32 = (h >>> s) &&& TrieMask
-    let inline bit        h s : uint32 = 1u <<< int (localHash h s)
-    let inline popCount i =
+    let inline localHash  h s = (h >>> s) &&& TrieMask
+    let inline bit        h s = 1u <<< int (localHash h s)
+    let inline popCount   i   =
       // From: http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
       //  x86/x64 support popcnt but that isn't available in ILAsm
       let mutable v = i
@@ -44,6 +44,7 @@ module PersistentHashMap =
       v <- (v &&& 0x33333333u) + ((v >>> 2) &&& 0x33333333u)
       ((v + (v >>> 4) &&& 0xF0F0F0Fu) * 0x1010101u) >>> 24
     let inline localIdx bit b = popCount (b &&& (bit - 1u)) |> int
+    let inline checkHash hash localHash shift = (hash &&& ((1u <<< shift) - 1u)) = localHash
 
     let inline copyArray (vs : 'T []) : 'T [] =
       let nvs = Array.zeroCreate vs.Length
@@ -83,6 +84,191 @@ module PersistentHashMap =
     let inline hashOf<'T when 'T :> IEquatable<'T>> (v : 'T)           = (box v).GetHashCode () |> uint32
     let inline equals<'T when 'T :> IEquatable<'T>> (l : 'T) (r : 'T)  = l.Equals r
 
+    module Loops =
+      let rec tryFindKeyValues key i (kvs : _ []) =
+        if i < kvs.Length then
+          let k, v = kvs.[i]
+          if equals k key then
+            Some v
+          else
+            tryFindKeyValues key (i + 1) kvs
+        else
+          None
+      let rec tryFind hash shift key m =
+        match m with
+        | BitmapN (b, ns) ->
+          let bit = bit hash shift
+          if (bit &&& b) <> 0u then
+            let localIdx = localIdx bit b
+            tryFind hash (shift + TrieShift) key ns.[localIdx]
+          else
+            None
+        | KeyValue (h, k, v) ->
+          if h = hash && equals k key then
+            Some v
+          else
+            None
+        | Empty ->
+          None
+        | HashCollisionN (h, kvs) ->
+          if hash = h then
+            tryFindKeyValues key 0 kvs
+          else
+            None
+
+      let rec set hash shift key value m =
+        match m with
+        | BitmapN (b, ns) ->
+          let bit = bit hash shift
+          let localIdx = localIdx bit b
+          if (bit &&& b) <> 0u then
+            let nn  = set hash (shift + TrieShift) key value ns.[localIdx]
+            let nns = copyArray ns
+            nns.[localIdx] <- nn
+            BitmapN (b, nns)
+          else
+            let nn  = KeyValue (hash, key, value)
+            let nns = copyArrayMakeHole localIdx nn ns
+            BitmapN (b ||| bit, nns)
+        | KeyValue (h, k, v) ->
+          if h = hash && equals k key then
+            KeyValue (hash, key, value)
+          elif h = hash then
+            HashCollisionN (hash, [| key, value; k, v |])
+          else
+            let kv = KeyValue (hash, key, value)
+            fromTwoNodes shift h m hash kv
+        | Empty ->
+          KeyValue (hash, key, value)
+        | HashCollisionN (h, kvs) ->
+          if h = hash then
+            let nkvs = copyArrayMakeHoleLast (key, value) kvs
+            HashCollisionN (h, nkvs)
+          else
+            let kv = KeyValue (hash, key, value)
+            fromTwoNodes shift h m hash kv
+
+      let rec findKeyValueIndex key i (kvs : _ []) =
+        if i < kvs.Length then
+          let k, _ = kvs.[i]
+          if equals k key then
+            i
+          else
+            findKeyValueIndex key (i + 1) kvs
+        else
+          -1
+
+      let rec unset hash shift key m =
+        match m with
+        | BitmapN (b, ns) ->
+          let bit = bit hash shift
+          let localIdx = localIdx bit b
+          if (bit &&& b) <> 0u then
+            let nn  = unset hash (shift + TrieShift) key ns.[localIdx]
+            match nn with
+            | Empty ->
+              if ns.Length > 1 then
+                let nns = copyArrayRemoveHole localIdx ns
+                BitmapN (b &&& ~~~bit, nns)
+              else
+                Empty
+            | _     ->
+              let nns = copyArray ns
+              nns.[localIdx] <- nn
+              BitmapN (b, nns)
+          else
+            m
+        | KeyValue (h, k, v) ->
+          if h = hash && equals k key then
+            Empty
+          else
+            m
+        | Empty ->
+          Empty
+        | HashCollisionN (h, kvs) ->
+          if h = hash then
+            let localIdx = findKeyValueIndex key 0 kvs
+            if localIdx > -1 then
+              if kvs.Length > 2 then
+                let nkvs = copyArrayRemoveHole localIdx kvs
+                HashCollisionN (h, nkvs)
+              elif kvs.Length > 1 then
+                let k, v = kvs.[localIdx ^^^ 1]
+                KeyValue (h, k , v)
+              else
+                Empty
+            else
+              m
+          else
+            m
+
+      let rec visitKeyValuesKeyValues (visitor : OptimizedClosures.FSharpFunc<_, _, _>) i (kvs : _ []) =
+        if i < kvs.Length then
+          let k, v = kvs.[i]
+          visitor.Invoke (k, v)
+          && visitKeyValuesKeyValues visitor (i + 1) kvs
+        else
+          true
+
+      let rec visitKeyValuesNodes (visitor : OptimizedClosures.FSharpFunc<_, _, _>) i (ns : _ []) =
+        if i < ns.Length then
+          let n = ns.[i]
+          visitKeyValues visitor n
+          && visitKeyValuesNodes visitor (i + 1) ns
+        else
+          true
+
+      and visitKeyValues (visitor : OptimizedClosures.FSharpFunc<_, _, _>) m =
+        match m with
+        | BitmapN (b, ns) ->
+          let rec nloop (visitor : OptimizedClosures.FSharpFunc<_, _, _>) i (ns : _ []) =
+            if i < ns.Length then
+              let n = ns.[i]
+              visitKeyValues visitor n
+              && nloop visitor (i + 1) ns
+            else
+              true
+          nloop visitor 0 ns
+        | KeyValue (_, k, v) ->
+          visitor.Invoke (k, v)
+        | Empty ->
+          true
+        | HashCollisionN (h, kvs) ->
+          visitKeyValuesKeyValues visitor 0 kvs
+
+      let rec checkInvariantKeyValues h i (kvs : _ []) =
+        if i < kvs.Length then
+          let k, v = kvs.[i]
+          h = hashOf k
+          && checkInvariantKeyValues h (i + 1) kvs
+        else
+          true
+
+      let rec checkInvariantNodes (hash : uint32) shift b localHash i (ns : _ []) =
+        if b <> 0u && i < ns.Length then
+          let n = ns.[i]
+          if (b &&& 1u) = 0u then
+            checkInvariantNodes hash shift (b >>> 1) (localHash + 1u) i ns
+          else
+            checkInvariant (hash ||| (localHash <<< shift)) (shift + TrieShift) n
+            && checkInvariantNodes hash shift (b >>> 1) (localHash + 1u) (i + 1) ns
+        else
+          b = 0u
+
+      and checkInvariant hash shift m =
+        match m with
+        | BitmapN (b, ns) ->
+          popCount b |> int = ns.Length
+          && checkInvariantNodes hash shift b 0u 0 ns
+        | KeyValue (h, k, v) ->
+          checkHash h hash shift
+          && h = hashOf k
+        | Empty ->
+          true
+        | HashCollisionN (h, kvs) ->
+          checkHash h hash shift
+          && checkInvariantKeyValues h 0 kvs
+
   open Details
 
   [<GeneralizableValue>]
@@ -96,106 +282,28 @@ module PersistentHashMap =
       false
 
   let inline tryFind (key : 'K) (m : PersistentHashMap<'K, 'V>) : 'V option =
-    let rec loop hash shift key m =
-      match m with
-      | Empty ->
-        None
-      | BitmapN (b, ns) ->
-        let bit = bit hash shift
-        if (bit &&& b) <> 0u then
-          let localIdx = localIdx bit b
-          loop hash (shift + TrieShift) key ns.[localIdx]
-        else
-          None
-      | KeyValue (h, k, v) ->
-        if h = hash && equals k key then
-          Some v
-        else
-          None
-      | HashCollisionN (h, kvs) ->
-        let hloop key i (kvs : _ []) =
-          if i < kvs.Length then
-            let k, v = kvs.[i]
-            if hash = h && equals k key then
-              Some v
-            else
-              None
-          else
-            None
-        if hash = h then
-          hloop key 0 kvs
-        else
-          None
-    loop (hashOf key) 0 key m
+    Loops.tryFind (hashOf key) 0 key m
 
   let inline set (key : 'K) (value : 'V) (m : PersistentHashMap<'K, 'V>) : PersistentHashMap<'K, 'V> =
-    let rec loop hash shift key value m =
-      match m with
-      | Empty ->
-        KeyValue (hash, key, value)
-      | BitmapN (b, ns) ->
-        let bit = bit hash shift
-        let localIdx = localIdx bit b
-        if (bit &&& b) <> 0u then
-          let nn  = loop hash (shift + TrieShift) key value ns.[localIdx]
-          let nns = copyArray ns
-          ns.[localIdx] <- nn
-          BitmapN (b, nns)
-        else
-          let nn  = KeyValue (hash, key, value)
-          let nns = copyArrayMakeHole localIdx nn ns
-          BitmapN (b ||| bit, nns)
-      | KeyValue (h, k, v)  ->
-        if h = hash && equals k key then
-          let kv = KeyValue (hash, key, value)
-          kv
-        elif h = hash then
-          HashCollisionN (hash, [| key, value; k, v |])
-        else
-          let kv = KeyValue (hash, key, value)
-          fromTwoNodes shift hash m h kv
-      | HashCollisionN (h, kvs) ->
-        if h = hash then
-          let nkvs = copyArrayMakeHoleLast (key, value) kvs
-          HashCollisionN (h, nkvs)
-        else
-          let kv = KeyValue (hash, key, value)
-          fromTwoNodes shift hash m h kv
-    loop (hashOf key) 0 key value m
+    Loops.set (hashOf key) 0 key value m
+
+  let inline unset (key : 'K) (m : PersistentHashMap<'K, 'V>) : PersistentHashMap<'K, 'V> =
+    Loops.unset (hashOf key) 0 key m
 
   let inline visitKeyValues (visitor : 'K -> 'V -> bool) (m : PersistentHashMap<'K, 'V>) : bool =
     let visitor = OptimizedClosures.FSharpFunc<_, _, _>.Adapt visitor
-    let rec loop (visitor : OptimizedClosures.FSharpFunc<_, _, _>) m =
-      match m with
-      | Empty ->
-        true
-      | BitmapN (b, ns) ->
-        let rec nloop (visitor : OptimizedClosures.FSharpFunc<_, _, _>) i (ns : _ []) =
-          if i < ns.Length then
-            let n = ns.[i]
-            if loop visitor n then
-              nloop visitor (i + 1) ns
-            else
-              false
-          else
-            true
-        nloop visitor 0 ns
-      | KeyValue (_, k, v) ->
-        visitor.Invoke (k, v)
-      | HashCollisionN (h, kvs) ->
-        let rec hloop (visitor : OptimizedClosures.FSharpFunc<_, _, _>) i (kvs : _ []) =
-          if i < kvs.Length then
-            let k, v = kvs.[i]
-            if visitor.Invoke (k, v) then
-              hloop visitor (i + 1) kvs
-            else
-              false
-          else
-            true
-        hloop visitor 0 kvs
-    loop visitor m
+    Loops.visitKeyValues visitor m
 
   let inline toArray (m : PersistentHashMap<'K, 'V>) : ('K*'V) [] =
     let ra = ResizeArray<_> 16
     visitKeyValues (fun k v -> ra.Add (k, v); true) m |> ignore
     ra.ToArray ()
+
+  let inline length (m : PersistentHashMap<'K, 'V>) : int =
+    let mutable l = 0
+    visitKeyValues (fun k v -> l <- l + 1; true) m |> ignore
+    l
+
+  let checkInvariant (phm : PersistentHashMap<'K, 'V>) : bool =
+    Loops.checkInvariant 0u 0 phm
+
