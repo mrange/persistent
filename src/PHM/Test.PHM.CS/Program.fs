@@ -51,11 +51,8 @@ module PropertyTests =
           c
       loop 0 v
 
-    let copyArrayMakeHole holeBit bitmap (vs : 'T []) =
-      check (holeBit <> 0u) "holeBit must bit be 0"
-      let nvs       = Array.zeroCreate (vs.Length + 1)
-      let mask      = holeBit - 1u
-      let lowCount  = popCount (bitmap &&& mask)
+    let copyArrayMakeHole at (vs : 'T []) hole =
+      let nvs = Array.zeroCreate (vs.Length + 1)
       let rec idLoop c i =
         if i < vs.Length then
           if c = 0 then
@@ -67,7 +64,8 @@ module PropertyTests =
         if i < vs.Length then
           nvs.[i + 1] <- vs.[i]
           skipLoop (i + 1)
-      idLoop lowCount 0
+      idLoop at 0
+      nvs.[at] <- hole
       nvs
 
     let empty () = PersistentHashMap.Empty<_, _> ()
@@ -146,9 +144,17 @@ module PropertyTests =
       notIdentical expected actual
       && expected = actual
 
-    static member ``CopyArrayMakeHoleLast copies the array and leaves a hole in last pos`` (vs : Empty []) =
-      let expected  = Array.append vs [| null |]
-      let actual    = PersistentHashMap.CopyArrayMakeHoleLast vs
+    static member ``CopyArrayMakeHoleLast copies the array and leaves a hole in last pos`` (vs : Empty []) (hole : Empty)=
+      let expected  = Array.append vs [| hole |]
+      let actual    = PersistentHashMap.CopyArrayMakeHoleLast (vs, hole)
+
+      notIdentical expected actual
+      && expected = actual
+
+    static member ``CopyArrayMakeHole copies the array and leaves a hole at pos`` (at : int) (vs : Empty []) (hole : Empty)=
+      let at        = abs at % (vs.Length + 1)
+      let expected  = copyArrayMakeHole at vs hole
+      let actual    = PersistentHashMap.CopyArrayMakeHole (at, vs, hole)
 
       notIdentical expected actual
       && expected = actual

@@ -110,22 +110,23 @@ namespace PHM.CS
     }
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
-    internal static T[] CopyArrayMakeHoleLast<T> (T[] vs)
+    internal static T[] CopyArrayMakeHoleLast<T> (T[] vs, T hole)
     {
       var nvs = new T[vs.Length + 1];
       Array.Copy (vs, nvs, vs.Length);
+      nvs[vs.Length] = hole;
       return nvs;
     }
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
-    internal static T[] CopyArrayMakeHole<T> (int at, T[] vs)
+    internal static T[] CopyArrayMakeHole<T> (int at, T[] vs, T hole)
     {
       Debug.Assert (at <= vs.Length);
-      Debug.Assert (vs.Length < TrieMaxNodes);
 
       var nvs = new T[vs.Length + 1];
       Array.Copy (vs, nvs, at);
       Array.Copy (vs, at, nvs, at + 1, vs.Length - at);
+      nvs[at] = hole;
       return nvs;
     }
 
@@ -594,8 +595,7 @@ namespace PHM.CS
         }
         else
         {
-          var nvs = CopyArrayMakeHole (localIdx, Nodes);
-          nvs[localIdx] = n;
+          var nvs = CopyArrayMakeHole (localIdx, Nodes, n);
           return new BitmapNodeN<K, V> (Bitmap | bit, nvs);
         }
       }
@@ -738,8 +738,7 @@ namespace PHM.CS
             }
           }
 
-          var avs = CopyArrayMakeHoleLast (KeyValues);
-          avs[KeyValues.Length] = n;
+          var avs = CopyArrayMakeHoleLast (KeyValues, n);
           return new HashCollisionNodeN<K, V> (h, avs);
         }
         else
