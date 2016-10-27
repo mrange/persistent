@@ -518,7 +518,8 @@ namespace PHM.CS
 #if PHM_TEST_BUILD
       internal override bool CheckInvariant (uint h, int s)
       {
-        if (PopCount (Bitmap) != Nodes.Length)
+        var length = PopCount (Bitmap);
+        if (length < 2 || length != Nodes.Length)
         {
           return false;
         }
@@ -799,6 +800,11 @@ namespace PHM.CS
 #if PHM_TEST_BUILD
       internal override bool CheckInvariant (uint h, int s)
       {
+        if (KeyValues.Length < 2)
+        {
+          return false;
+        }
+
         for (var iter = 0; iter < KeyValues.Length; ++iter)
         {
           var kv = KeyValues[iter];

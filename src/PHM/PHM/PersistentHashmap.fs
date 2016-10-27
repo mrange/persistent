@@ -259,6 +259,7 @@ module PersistentHashMap =
         match m with
         | BitmapN (b, ns) ->
           popCount b |> int = ns.Length
+//          && ns.Length > 1
           && checkInvariantNodes hash shift b 0u 0 ns
         | KeyValue (h, k, v) ->
           checkHash h hash shift
@@ -267,6 +268,7 @@ module PersistentHashMap =
           true
         | HashCollisionN (h, kvs) ->
           checkHash h hash shift
+          && kvs.Length > 1
           && checkInvariantKeyValues h 0 kvs
 
   open Details
