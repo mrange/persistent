@@ -13,6 +13,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 // ----------------------------------------------------------------------------------------------
+
+// Inspired by Clojure's Persistent Hash Map (https://github.com/clojure/clojure/blob/master/src/jvm/clojure/lang/PersistentHashMap.java)
+//  and Phil Bagwell's Ideal Hash Trie (http://lampwww.epfl.ch/papers/idealhashtrees.pdf)
+//  and http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
+
 module Persistent
 
 type PersistentHashMap<'K, 'V when 'K :> System.IEquatable<'K>>  =
@@ -94,6 +99,7 @@ module PersistentHashMap =
             tryFindKeyValues key (i + 1) kvs
         else
           None
+
       let rec tryFind hash shift key m =
         match m with
         | BitmapN (b, ns) ->
@@ -221,14 +227,7 @@ module PersistentHashMap =
       and visitKeyValues (visitor : OptimizedClosures.FSharpFunc<_, _, _>) m =
         match m with
         | BitmapN (b, ns) ->
-          let rec nloop (visitor : OptimizedClosures.FSharpFunc<_, _, _>) i (ns : _ []) =
-            if i < ns.Length then
-              let n = ns.[i]
-              visitKeyValues visitor n
-              && nloop visitor (i + 1) ns
-            else
-              true
-          nloop visitor 0 ns
+          visitKeyValuesNodes visitor 0 ns
         | KeyValue (_, k, v) ->
           visitor.Invoke (k, v)
         | Empty ->

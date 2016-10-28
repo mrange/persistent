@@ -415,8 +415,7 @@ namespace PHM.CS
         var bit = Bit (h, s);
         if ((bit & Bitmap) != 0)
         {
-          var nv = Node.Set (h, s + TrieShift, n);
-          return new BitmapNode1<K, V> (Bitmap, nv);
+          return new BitmapNode1<K, V> (Bitmap, Node.Set (h, s + TrieShift, n));
         }
         else if (Bitmap < bit)
         {
@@ -449,7 +448,7 @@ namespace PHM.CS
         {
           var localIdx  = PopCount (Bitmap & (bit - 1));
           var updated   = Node.Unset (h, s + TrieShift, k);
-          if (updated == Node)
+          if (ReferenceEquals (updated, Node))
           {
             return this;
           }
@@ -574,8 +573,7 @@ namespace PHM.CS
       {
         for (var iter = 0; iter < Nodes.Length; ++iter)
         {
-          var n = Nodes[iter];
-          if (!n.Receive (r))
+          if (!Nodes[iter].Receive (r))
           {
             return false;
           }
@@ -630,7 +628,7 @@ namespace PHM.CS
         {
           var localIdx  = PopCount (Bitmap & (bit - 1));
           var updated   = Nodes[localIdx].Unset (h, s + TrieShift, k);
-          if (updated == Nodes[localIdx])
+          if (ReferenceEquals (updated, Nodes[localIdx]))
           {
             return this;
           }
@@ -642,8 +640,7 @@ namespace PHM.CS
           }
           else if (Nodes.Length > 2)
           {
-            var nvs = CopyArrayRemoveHole (localIdx, Nodes);
-            return new BitmapNodeN<K, V> (Bitmap & ~bit, nvs);
+            return new BitmapNodeN<K, V> (Bitmap & ~bit, CopyArrayRemoveHole (localIdx, Nodes));
           }
           else if (Nodes.Length == 2)
           {
@@ -734,9 +731,8 @@ namespace PHM.CS
       internal sealed override BaseNode<K, V> Set (uint h, int s, KeyValueNode<K, V> n)
       {
         var localIdx  = (int)LocalHash (h, s);
-        var nv        = Nodes[localIdx].Set (h, s + TrieShift, n) ;
         var nvs       = CopyArray (Nodes);
-        nvs[localIdx] = nv;
+        nvs[localIdx] = Nodes[localIdx].Set (h, s + TrieShift, n);
         return new BitmapNode16<K, V> (nvs);
       }
 
@@ -750,7 +746,7 @@ namespace PHM.CS
       {
         var localIdx  = (int)LocalHash (h, s);
         var updated   = Nodes[localIdx].Unset (h, s + TrieShift, k);
-        if (updated == Nodes[localIdx])
+        if (ReferenceEquals (updated, Nodes[localIdx]))
         {
           return this;
         }
@@ -764,8 +760,7 @@ namespace PHM.CS
         else
         {
           var bit = Bit (h, s);
-          var nvs = CopyArrayRemoveHole (localIdx, Nodes);
-          return new BitmapNodeN<K, V> (TrieMask & ~bit, nvs);
+          return new BitmapNodeN<K, V> (TrieMask & ~bit, CopyArrayRemoveHole (localIdx, Nodes));
         }
       }
     }
@@ -850,8 +845,7 @@ namespace PHM.CS
           var k = n.Key;
           for (var iter = 0; iter < KeyValues.Length; ++iter)
           {
-            var kv = KeyValues[iter];
-            if (kv.Key.Equals (k))
+            if (KeyValues[iter].Key.Equals (k))
             {
               var rvs = CopyArray (KeyValues);
               rvs[iter] = n;
@@ -859,8 +853,7 @@ namespace PHM.CS
             }
           }
 
-          var avs = CopyArrayMakeHoleLast (KeyValues, n);
-          return new HashCollisionNodeN<K, V> (h, avs);
+          return new HashCollisionNodeN<K, V> (h, CopyArrayMakeHoleLast (KeyValues, n));
         }
         else
         {
@@ -898,13 +891,11 @@ namespace PHM.CS
         {
           for (var iter = 0; iter < KeyValues.Length; ++iter)
           {
-            var kv = KeyValues[iter];
-            if (kv.Key.Equals (k))
+            if (KeyValues[iter].Key.Equals (k))
             {
               if (KeyValues.Length > 2)
               {
-                var rvs = CopyArrayRemoveHole (iter, KeyValues);
-                return new HashCollisionNodeN<K, V> (h, rvs);
+                return new HashCollisionNodeN<K, V> (h, CopyArrayRemoveHole (iter, KeyValues));
               }
               if (KeyValues.Length == 2)
               {
