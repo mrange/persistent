@@ -107,7 +107,7 @@ module FsPropertyTests =
       let unique    = uniqueKey vs
       let phm       = unique |> fromArray
 
-      let rec loop (phm : PersistentHashMap<_, _>) i =
+      let rec loop (phm : IPersistentHashMap<_, _>) i =
         if PersistentHashMap.checkInvariant phm |> not then
           None
         elif i < unique.Length then
@@ -124,7 +124,7 @@ module FsPropertyTests =
       | None      -> false
 
     static member ``PHM should behave as Map`` (vs : Action []) =
-      let compare map (phm : PersistentHashMap<_, _>) =
+      let compare map (phm : IPersistentHashMap<_, _>) =
         let empty =
           match map |> Map.isEmpty, phm |> PersistentHashMap.isEmpty with
           | true  , true
@@ -139,11 +139,11 @@ module FsPropertyTests =
         PersistentHashMap.checkInvariant phm
         && (PersistentHashMap.length phm = map.Count)
         && empty
-        && PersistentHashMap.visitKeyValues visitor phm
+        && PersistentHashMap.visit visitor phm
 
       let ra = ResizeArray<int> ()
 
-      let rec loop map (phm : PersistentHashMap<_, _>) i =
+      let rec loop map (phm : IPersistentHashMap<_, _>) i =
         if i < vs.Length then
           match vs.[i] with
           | Add (k, v)  ->
@@ -175,7 +175,7 @@ module FsPropertyTests =
     let testCount = 1000
 #endif
 
-    //Properties.``PHM toArray must contain all added values`` [|(1, "")|] |> printfn "%A"
+//    Properties.``PHM TryFind must return all added values`` [|(StringKey -30, StringKey 0); (IntKey 34, StringKey 0)|] |> printfn "%A"
 
     let config = { Config.Quick with MaxTest = testCount; MaxFail = testCount }
     Check.All<Properties> config

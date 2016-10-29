@@ -808,6 +808,11 @@ namespace PHM.CS
           {
             return false;
           }
+
+          if (!kv.CheckInvariant (h, s))
+          {
+            return false;
+          }
         }
 
         return CheckHash (Hash, h, s);
