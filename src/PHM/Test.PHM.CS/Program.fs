@@ -14,6 +14,15 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------------------
 
+module FsCheckConfig =
+  open FsCheck
+#if DEBUG
+  let testCount = 100
+#else
+  let testCount = 1000
+#endif
+  let config = { Config.Quick with MaxTest = testCount; MaxFail = testCount }
+
 module FsPropertyTests =
   open Persistent
   open System
@@ -169,17 +178,8 @@ module FsPropertyTests =
   open FsCheck
 
   let run () =
-#if DEBUG
-    let testCount = 100
-#else
-    let testCount = 1000
-#endif
-
 //    Properties.``PHM TryFind must return all added values`` [|(StringKey -30, StringKey 0); (IntKey 34, StringKey 0)|] |> printfn "%A"
-
-    let config = { Config.Quick with MaxTest = testCount; MaxFail = testCount }
-    Check.All<Properties> config
-    ()
+    Check.All<Properties> FsCheckConfig.config
 
 module PropertyTests =
   open FsCheck
@@ -412,16 +412,8 @@ module PropertyTests =
       loop Map.empty (empty ()) 0
 
   let run () =
-#if DEBUG
-    let testCount = 100
-#else
-    let testCount = 1000
-#endif
-
 //    Properties.``PHM toArray must contain all added values`` [|(13, null); (-3, ""); (0, "")|] |> printfn "Result: %A"
-
-    let config = { Config.Quick with MaxTest = testCount; MaxFail = testCount }
-    Check.All<Properties>  config
+    Check.All<Properties> FsCheckConfig.config
 
 #if !DEBUG
 module PerformanceTests =

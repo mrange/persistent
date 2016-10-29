@@ -20,7 +20,7 @@
 
 module Persistent
 
-type [<AllowNullLiteralAttribute>] IPersistentHashMap<'K, 'V when 'K :> System.IEquatable<'K>> =
+type IPersistentHashMap<'K, 'V when 'K :> System.IEquatable<'K>> =
   interface
 #if PHM_TEST_BUILD
     abstract CheckInvariant : unit -> bool
@@ -57,6 +57,8 @@ module PersistentHashMap =
     let inline localIdx bit b = popCount (b &&& (bit - 1u)) |> int
     let inline checkHash hash localHash shift = (hash &&& ((1u <<< shift) - 1u)) = localHash
 
+    let inline refEqual<'T when 'T: not struct> (l : 'T) (r : 'T) = Object.ReferenceEquals (l, r)
+
     let inline copyArray (vs : 'T []) : 'T [] =
       let nvs = Array.zeroCreate vs.Length
       System.Array.Copy (vs, nvs, vs.Length)
@@ -85,8 +87,8 @@ module PersistentHashMap =
     let inline hashOf<'T when 'T :> IEquatable<'T>> (v : 'T)           = (box v).GetHashCode () |> uint32
     let inline equals<'T when 'T :> IEquatable<'T>> (l : 'T) (r : 'T)  = l.Equals r
 
-    type [<AbstractClass>] [<AllowNullLiteralAttribute>] BaseNode<'K, 'V when 'K :> System.IEquatable<'K>>() =
-      static let emptyNode = EmptyNode<'K, 'V> () :> IPersistentHashMap<'K, 'V>
+    type [<AbstractClass>] BaseNode<'K, 'V when 'K :> System.IEquatable<'K>>() =
+      static let emptyNode = EmptyNode<'K, 'V> () :> BaseNode<'K, 'V>
 
       interface IPersistentHashMap<'K, 'V> with
 #if PHM_TEST_BUILD
@@ -102,11 +104,7 @@ module PersistentHashMap =
           x.TryFind h 0 k
         member x.Unset   k  =
           let h = hashOf k
-          let n = x.Unset h 0 k
-          if n <> null then
-            upcast n
-          else
-            BaseNode<'K, 'V>.EmptyHashMap
+          upcast x.Unset h 0 k
 
 #if PHM_TEST_BUILD
       abstract DoCheckInvariant : uint32  -> int  -> bool
@@ -141,7 +139,7 @@ module PersistentHashMap =
       override x.Empty    ()          = true
       override x.Set      h s kv      = upcast kv
       override x.TryFind  h s k       = None
-      override x.Unset    h s k       = null
+      override x.Unset    h s k       = BaseNode<'K, 'V>.EmptyHashMap
 
     and [<Sealed>] KeyValueNode<'K, 'V when 'K :> System.IEquatable<'K>>(hash : uint32, key : 'K, value : 'V) =
       inherit BaseNode<'K, 'V>()
@@ -171,7 +169,7 @@ module PersistentHashMap =
           None
       override x.Unset    h s k       =
         if h = hash && equals k key then
-          null
+          BaseNode<'K, 'V>.EmptyHashMap
         else
           upcast x
 
@@ -229,7 +227,7 @@ module PersistentHashMap =
         let localIdx = localIdx bit bitmap
         if (bit &&& bitmap) <> 0u then
           let nn = nodes.[localIdx].Unset h (s + TrieShift) k
-          if nn <> null then
+          if refEqual nn BaseNode<'K, 'V>.EmptyHashMap |> not then
             let nns = copyArray nodes
             nns.[localIdx] <- nn
             upcast BitmapNodeN (bitmap, nns)
@@ -238,7 +236,7 @@ module PersistentHashMap =
               let nns = copyArrayRemoveHole localIdx nodes
               upcast BitmapNodeN (bitmap &&& ~~~bit, nns)
             else
-              null
+              BaseNode<'K, 'V>.EmptyHashMap
         else
           upcast x
 
@@ -313,7 +311,7 @@ module PersistentHashMap =
               let kv = keyValues.[localIdx ^^^ 1]
               upcast kv
             else
-              null
+              BaseNode<'K, 'V>.EmptyHashMap
           else
             upcast x
         else
@@ -327,7 +325,7 @@ module PersistentHashMap =
 #endif
 
   [<GeneralizableValue>]
-  let empty<'K, 'V when 'K :> System.IEquatable<'K>> : IPersistentHashMap<_, _> = BaseNode<'K, 'V>.EmptyHashMap
+  let empty<'K, 'V when 'K :> System.IEquatable<'K>> : IPersistentHashMap<_, _> = upcast BaseNode<'K, 'V>.EmptyHashMap
 
   let inline isEmpty (m : IPersistentHashMap<'K, 'V>) : bool =
     m.IsEmpty
