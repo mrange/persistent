@@ -595,7 +595,36 @@ module PerformanceTests =
       let result    = doLookup removals inserted
       Checker.check result "Expected true for all"
 
+  module RedBlackTree =
+    let inline doInsert hm =
+      inserts
+      |> Array.fold (fun s (k, v) -> s |> RedBlackTree.set k v) hm
+
+    let inline doLookup fa hm =
+      fa
+      |> Array.forall (fun (k, _) -> hm |> RedBlackTree.containsKey k)
+
+    let empty     = RedBlackTree.empty
+    let inserted  = doInsert empty
+
+    let insert () =
+      let result    = doInsert empty
+      Checker.check (RedBlackTree.count result = RedBlackTree.count inserted) "Expected to be same length as testSet"
+
+    let insertAndLookup () =
+      let inserted  = doInsert empty
+      let result    = doLookup removals inserted
+      Checker.check result "Expected true for all"
+
+    let lookupInserted () =
+      let result    = doLookup removals inserted
+      Checker.check result "Expected true for all"
+
   module Map =
+
+    open Patches.Microsoft.FSharp.Collections
+
+    open System.Collections.Generic
 
     let inline doInsert hm =
       inserts
@@ -609,7 +638,13 @@ module PerformanceTests =
       fa
       |> Array.forall (fun (k, _) -> hm |> Map.containsKey k)
 
-    let empty     = Map.empty
+    let empty     = 
+      let comparer = 
+        { new IComparer<Key> with
+          member x.Compare (l, r) = l.Value.CompareTo r.Value
+        }
+      Map.emptyWithComparer comparer
+
     let inserted  = doInsert empty
 
     let insert () =
@@ -722,6 +757,8 @@ module PerformanceTests =
       "PHM     - Lookup"  , FsPersistentHashMap.lookupInserted
       "PHM     - Insert"  , FsPersistentHashMap.insert
       "PHM     - Remove"  , FsPersistentHashMap.remove
+      "RB      - Lookup"  , RedBlackTree.lookupInserted
+      "RB      - Insert"  , RedBlackTree.insert
       "FSharpx - Lookup"  , FSharpx.lookupInserted
       "FSharpx - Insert"  , FSharpx.insert
       "FSharpx - Remove"  , FSharpx.remove
