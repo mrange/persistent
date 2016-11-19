@@ -670,7 +670,7 @@ module PerformanceTests =
       Checker.check result "Expected true for all"
 
   module FSharpx =
-    open FSharpx.Collections
+    open Patches.FSharpx.Collections
 
     let inline doInsert hm =
       inserts

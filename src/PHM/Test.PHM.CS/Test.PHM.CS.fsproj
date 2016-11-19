@@ -82,7 +82,8 @@
     <Compile Include="Common.fs" />
     <Compile Include="RedBlackTree.fs" />
     <Compile Include="Patches.fs" />
-    <Compile Include="Map.fs" />
+    <Compile Include="FsharpMap.fs" />
+    <Compile Include="FsharpxPersistentHashMap.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
     <Content Include="packages.config" />
@@ -94,10 +95,6 @@
     </Reference>
     <Reference Include="FSharp.Core">
       <HintPath>..\packages\FSharp.Core.3.1.2.5\lib\net40\FSharp.Core.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="FSharpx.Collections">
-      <HintPath>..\packages\FSharpx.Collections.1.15.2\lib\net40\FSharpx.Collections.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="mscorlib" />
