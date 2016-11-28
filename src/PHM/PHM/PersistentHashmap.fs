@@ -119,15 +119,15 @@ module PersistentHashMap =
 
       static member EmptyHashMap = emptyNode
 
-      static member FromTwoNodes shift h1 n1 h2 n2 =
+      static member FromTwoNodes shift h1 n1 h2 n2 : BaseNode<_, _> =
         let b1 = bit h1 shift
         let b2 = bit h2 shift
         if b1 < b2 then
-          BitmapNodeN (b1 ||| b2, [| n1; n2 |])
+          upcast BitmapNodeN (b1 ||| b2, [| n1; n2 |])
         elif b1 > b2 then
-          BitmapNodeN (b2 ||| b1, [| n2; n1 |])
+          upcast BitmapNodeN (b2 ||| b1, [| n2; n1 |])
         else
-          BitmapNodeN (b1, [| BaseNode<_, _>.FromTwoNodes (shift + TrieShift) h1 n1 h2 n2 |])
+          upcast BitmapNode1 (b1, BaseNode<_, _>.FromTwoNodes (shift + TrieShift) h1 n1 h2 n2)
 
     and [<Sealed>] EmptyNode<'K, 'V when 'K :> System.IEquatable<'K>>() =
       inherit BaseNode<'K, 'V>()
@@ -159,9 +159,9 @@ module PersistentHashMap =
         if h = hash && equals k key then
           upcast KeyValueNode (h, k, kv.Value)
         elif h = hash then
-          upcast HashCollissionNodeN (h, [| x; kv |])
+          upcast HashCollisionNodeN (h, [| x; kv |])
         else
-          upcast BaseNode<'K, 'V>.FromTwoNodes s hash x h kv
+          BaseNode<'K, 'V>.FromTwoNodes s hash x h kv
       override x.TryFind  h s k       =
         if h = hash && equals k key then
           Some value
@@ -170,6 +170,43 @@ module PersistentHashMap =
       override x.Unset    h s k       =
         if h = hash && equals k key then
           BaseNode<'K, 'V>.EmptyHashMap
+        else
+          upcast x
+
+    and [<Sealed>] BitmapNode1<'K, 'V when 'K :> System.IEquatable<'K>>(bitmap : uint32, node : BaseNode<'K, 'V>) =
+      inherit BaseNode<'K, 'V>()
+
+#if PHM_TEST_BUILD
+      override x.DoCheckInvariant h s =
+        let localIdx = popCount (bitmap - 1u)
+        popCount bitmap |> int = 1
+        && node.DoCheckInvariant (h ||| (localIdx <<< s)) (s + TrieShift)
+#endif
+      override x.DoVisit  r           = node.DoVisit r
+      override x.Set      h s kv      =
+        let bit = bit h s
+        if (bit &&& bitmap) <> 0u then
+          let nn  = node.Set h (s + TrieShift) kv
+          upcast BitmapNode1 (bitmap, nn)
+        elif bitmap < bit then
+          upcast BitmapNodeN (bitmap ||| bit, [| node; kv |])
+        else
+          upcast BitmapNodeN (bit ||| bitmap, [| kv; node |])
+
+      override x.TryFind  h s k       =
+        let bit = bit h s
+        if (bit &&& bitmap) <> 0u then
+          node.TryFind h (s + TrieShift) k
+        else
+          None
+      override x.Unset    h s k       =
+        let bit = bit h s
+        if (bit &&& bitmap) <> 0u then
+          let nn = node.Unset h (s + TrieShift) k
+          if refEqual nn BaseNode<'K, 'V>.EmptyHashMap |> not then
+            upcast BitmapNode1 (bitmap, nn)
+          else
+            BaseNode<'K, 'V>.EmptyHashMap
         else
           upcast x
 
@@ -214,7 +251,10 @@ module PersistentHashMap =
           upcast BitmapNodeN (bitmap, nns)
         else
           let nns = copyArrayMakeHole localIdx (kv :> BaseNode<'K, 'V>) nodes
-          upcast BitmapNodeN (bitmap ||| bit, nns)
+          if nns.Length < 16 then
+            upcast BitmapNodeN (bitmap ||| bit, nns)
+          else
+            upcast BitmapNode16 nns
       override x.TryFind  h s k       =
         let bit = bit h s
         if (bit &&& bitmap) <> 0u then
@@ -232,15 +272,65 @@ module PersistentHashMap =
             nns.[localIdx] <- nn
             upcast BitmapNodeN (bitmap, nns)
           else
-            if nodes.Length > 1 then
+            if nodes.Length > 2 then
               let nns = copyArrayRemoveHole localIdx nodes
               upcast BitmapNodeN (bitmap &&& ~~~bit, nns)
+            elif nodes.Length > 1 then
+              upcast BitmapNode1 (bitmap &&& ~~~bit, nodes.[1 - localIdx])
             else
               BaseNode<'K, 'V>.EmptyHashMap
         else
           upcast x
 
-    and [<Sealed>] HashCollissionNodeN<'K, 'V when 'K :> System.IEquatable<'K>>(hash : uint32, keyValues : KeyValueNode<'K, 'V> []) =
+    and [<Sealed>] BitmapNode16<'K, 'V when 'K :> System.IEquatable<'K>>(nodes : BaseNode<'K, 'V> []) =
+      inherit BaseNode<'K, 'V>()
+
+#if PHM_TEST_BUILD
+      let rec doCheckInvariantNodes (hash : uint32) shift localHash i =
+        if i < nodes.Length then
+          let n = nodes.[i]
+          n.DoCheckInvariant (hash ||| (localHash <<< shift)) (shift + TrieShift)
+          && doCheckInvariantNodes hash shift (localHash + 1u) (i + 1)
+        else
+          true
+#endif
+
+      let rec doVisit (r : OptimizedClosures.FSharpFunc<_, _, _>) i =
+        if i < nodes.Length then
+          let n = nodes.[i]
+          n.DoVisit r
+          && doVisit r (i + 1)
+        else
+          true
+
+#if PHM_TEST_BUILD
+      override x.DoCheckInvariant h s =
+  //          && ns.Length > 1
+        doCheckInvariantNodes h s 0u 0
+#endif
+      override x.DoVisit  r           = doVisit r 0
+      override x.Set      h s kv      =
+        let localIdx = localHash h s |> int
+        let nn  = nodes.[localIdx].Set h (s + TrieShift) kv
+        let nns = copyArray nodes
+        nns.[localIdx] <- nn
+        upcast BitmapNode16 (nns)
+      override x.TryFind  h s k       =
+        let localIdx = localHash h s |> int
+        nodes.[localIdx].TryFind h (s + TrieShift) k
+      override x.Unset    h s k       =
+        let bit       = bit h s
+        let localIdx  = localHash h s |> int
+        let nn = nodes.[localIdx].Unset h (s + TrieShift) k
+        if refEqual nn BaseNode<'K, 'V>.EmptyHashMap |> not then
+          let nns = copyArray nodes
+          nns.[localIdx] <- nn
+          upcast BitmapNode16 (nns)
+        else
+          let nns = copyArrayRemoveHole localIdx nodes
+          upcast BitmapNodeN (TrieMask &&& ~~~bit, nns)
+
+    and [<Sealed>] HashCollisionNodeN<'K, 'V when 'K :> System.IEquatable<'K>>(hash : uint32, keyValues : KeyValueNode<'K, 'V> []) =
       inherit BaseNode<'K, 'V>()
 
 #if PHM_TEST_BUILD
@@ -292,9 +382,9 @@ module PersistentHashMap =
       override x.Set      h s kv      =
         if h = hash then
           let nkvs = copyArrayMakeHoleLast kv keyValues
-          upcast HashCollissionNodeN (h, nkvs)
+          upcast HashCollisionNodeN (h, nkvs)
         else
-          upcast BaseNode<'K, 'V>.FromTwoNodes s hash x h kv
+          BaseNode<'K, 'V>.FromTwoNodes s hash x h kv
       override x.TryFind  h s k       =
         if h = hash then
           tryFind k 0
@@ -306,7 +396,7 @@ module PersistentHashMap =
           if localIdx > -1 then
             if keyValues.Length > 2 then
               let nkvs = copyArrayRemoveHole localIdx keyValues
-              upcast HashCollissionNodeN (hash, nkvs)
+              upcast HashCollisionNodeN (hash, nkvs)
             elif keyValues.Length > 1 then
               let kv = keyValues.[localIdx ^^^ 1]
               upcast kv

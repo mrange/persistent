@@ -178,7 +178,7 @@ module FsPropertyTests =
   open FsCheck
 
   let run () =
-//    Properties.``PHM TryFind must return all added values`` [|(StringKey -30, StringKey 0); (IntKey 34, StringKey 0)|] |> printfn "%A"
+    // Properties.``PHM toArray must contain all added values`` [|(38, ""); (26, ""); (46, ""); (-31, null); (-11, ""); (9, ""); (29, ""); (-28, ""); (8, ""); (-9, ""); (12, null); (11, ""); (0, ""); (31, null); (-45, ""); (-46, "")|] |> printfn "%A"
     Check.All<Properties> FsCheckConfig.config
 
 module PropertyTests =
