@@ -87,13 +87,15 @@ module FsPropertyTests =
     | Remove  of int
 
   type Properties () =
+    static let checkInvariant (phm : PersistentHashMap<_, _>) = phm.CheckInvariant ()
+
     static member ``PHM toArray must contain all added values`` (vs : (int*string) []) =
       let expected  = uniqueKey vs
       let phm       = vs |> fromArray
       let actual    = phm |> toSortedKeyArray
 
       notIdentical expected actual
-      && PersistentHashMap.checkInvariant phm
+      && checkInvariant phm
       && expected = actual
 
     static member ``PHM TryFind must return all added values`` (vs : (ComplexType*ComplexType) []) =
@@ -109,15 +111,15 @@ module FsPropertyTests =
         else
           true
 
-      PersistentHashMap.checkInvariant phm
+      checkInvariant phm
       && loop 0
 
     static member ``PHM Unset on all added values must yield empty map`` (vs : (HalfHash*int) []) =
       let unique    = uniqueKey vs
       let phm       = unique |> fromArray
 
-      let rec loop (phm : IPersistentHashMap<_, _>) i =
-        if PersistentHashMap.checkInvariant phm |> not then
+      let rec loop (phm : PersistentHashMap<_, _>) i =
+        if checkInvariant phm |> not then
           None
         elif i < unique.Length then
           if phm |> PersistentHashMap.isEmpty then
@@ -133,7 +135,7 @@ module FsPropertyTests =
       | None      -> false
 
     static member ``PHM should behave as Map`` (vs : Action []) =
-      let compare map (phm : IPersistentHashMap<_, _>) =
+      let compare map (phm : PersistentHashMap<_, _>) =
         let empty =
           match map |> Map.isEmpty, phm |> PersistentHashMap.isEmpty with
           | true  , true
@@ -145,14 +147,14 @@ module FsPropertyTests =
           | Some fv -> v = fv
           | _       -> false
 
-        PersistentHashMap.checkInvariant phm
+        checkInvariant phm
         && (PersistentHashMap.length phm = map.Count)
         && empty
         && PersistentHashMap.visit visitor phm
 
       let ra = ResizeArray<int> ()
 
-      let rec loop map (phm : IPersistentHashMap<_, _>) i =
+      let rec loop map (phm : PersistentHashMap<_, _>) i =
         if i < vs.Length then
           match vs.[i] with
           | Add (k, v)  ->
