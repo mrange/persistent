@@ -237,9 +237,9 @@ module PropertyTests =
 
     let empty () = PersistentHashMap.Empty<_, _> ()
 
-    let set k v (phm : IPersistentHashMap<_, _>) = phm.Set (k, v)
+    let set k v (phm : PersistentHashMap<_, _>) = phm.Set (k, v)
 
-    let length (phm : IPersistentHashMap<_, _>) =
+    let length (phm : PersistentHashMap<_, _>) =
       let mutable l = 0
       let visitor _ _ = l <- l + 1; true
       phm.Visit (Func<_, _, _> visitor) |> ignore
@@ -258,7 +258,7 @@ module PropertyTests =
         (empty ())
         kvs
 
-    let toArray (phm : IPersistentHashMap<'K, 'V>) =
+    let toArray (phm : PersistentHashMap<'K, 'V>) =
       phm
       |> FsLinq.map (fun kv -> kv.Key, kv.Value)
       |> FsLinq.toArray
@@ -268,7 +268,7 @@ module PropertyTests =
       vs |> Array.sortInPlaceBy fst
       vs
 
-    let checkInvariant (phm : IPersistentHashMap<'K, 'V>) = phm.CheckInvariant ()
+    let checkInvariant (phm : PersistentHashMap<'K, 'V>) = phm.CheckInvariant ()
 
   open Common
 
@@ -355,7 +355,7 @@ module PropertyTests =
       let unique    = uniqueKey vs
       let phm       = unique |> fromArray
 
-      let rec loop (phm : IPersistentHashMap<_, _>) i =
+      let rec loop (phm : PersistentHashMap<_, _>) i =
         if checkInvariant phm |> not then
           None
         elif i < unique.Length then
@@ -372,7 +372,7 @@ module PropertyTests =
       | None      -> false
 
     static member ``PHM should behave as Map`` (vs : Action []) =
-      let compare map (phm : IPersistentHashMap<_, _>) =
+      let compare map (phm : PersistentHashMap<_, _>) =
         let empty =
           match map |> Map.isEmpty, phm.IsEmpty with
           | true  , true
@@ -388,7 +388,7 @@ module PropertyTests =
 
       let ra = ResizeArray<int> ()
 
-      let rec loop map (phm : IPersistentHashMap<_, _>) i =
+      let rec loop map (phm : PersistentHashMap<_, _>) i =
         if i < vs.Length then
           match vs.[i] with
           | Add (k, v)  ->
@@ -513,7 +513,7 @@ module PerformanceTests =
     a
 
   module PersistentHashMap =
-    let length (phm : IPersistentHashMap<_, _>) =
+    let length (phm : PersistentHashMap<_, _>) =
       let mutable l = 0
       let visitor _ _ = l <- l + 1; true
       phm.Visit (Func<_, _, _> visitor) |> ignore
@@ -521,13 +521,13 @@ module PerformanceTests =
 
     let inline doInsert phm =
       inserts
-      |> Array.fold (fun (s : IPersistentHashMap<_, _>) (k, v) -> s.Set (k, v)) phm
+      |> Array.fold (fun (s : PersistentHashMap<_, _>) (k, v) -> s.Set (k, v)) phm
 
     let inline doRemove phm =
       inserts
-      |> Array.fold (fun (s : IPersistentHashMap<_, _>) (k, _) -> s.Unset k) phm
+      |> Array.fold (fun (s : PersistentHashMap<_, _>) (k, _) -> s.Unset k) phm
 
-    let inline doLookup fa (phm : IPersistentHashMap<_, _>) =
+    let inline doLookup fa (phm : PersistentHashMap<_, _>) =
       fa
       |> Array.forall (fun (k, _) -> let r, _ = phm.TryFind k in r)
 

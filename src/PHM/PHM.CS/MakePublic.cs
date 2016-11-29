@@ -16,7 +16,7 @@
 
 namespace PHM.CS
 {
-  public partial interface IPersistentHashMap<K, V>
+  public partial class PersistentHashMap<K, V>
   {
   }
 

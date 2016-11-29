@@ -28,25 +28,95 @@ namespace PHM.CS
   using System.Runtime.CompilerServices;
   using System.Text;
 
-  partial interface IPersistentHashMap<K, V> : IEnumerable<KeyValuePair<K, V>>
+  abstract partial class PersistentHashMap<K, V> : IEnumerable<KeyValuePair<K ,V>>
     where K : IEquatable<K>
   {
+    internal static readonly PersistentHashMap.EmptyNode<K, V> EmptyNode = new PersistentHashMap.EmptyNode<K, V> ();
+
+    public bool IsEmpty
+    {
+      [MethodImpl (MethodImplOptions.AggressiveInlining)]
+      get
+      {
+        return Empty ();
+      }
+    }
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    public bool Visit (Func<K, V, bool> r)
+    {
+      if (r != null)
+      {
+        return Receive (r);
+      }
+      else
+      {
+        return true;
+      }
+    }
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    public PersistentHashMap<K, V> Set (K k, V v)
+    {
+      var h = (uint)k.GetHashCode ();
+      return Set (h, 0, new PersistentHashMap.KeyValueNode<K, V> (h, k, v));
+    }
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    public bool TryFind (K k, out V v)
+    {
+      return TryFind ((uint)k.GetHashCode (), 0, k, out v);
+    }
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    public PersistentHashMap<K, V> Unset (K k)
+    {
+      return Unset ((uint)k.GetHashCode (), 0, k) ?? EmptyNode;
+    }
+
 #if PHM_TEST_BUILD
-    bool                      CheckInvariant  ();
+    public bool CheckInvariant ()
+    {
+      return CheckInvariant (0, 0);
+    }
 #endif
-    bool                      IsEmpty         { get; }
-    bool                      Visit           (Func<K, V, bool> r);
-    IPersistentHashMap<K, V>  Set             (K k, V v);
-    bool                      TryFind         (K k, out V v);
-    IPersistentHashMap<K, V>  Unset           (K k);
+
+    public abstract IEnumerator<KeyValuePair<K, V>> GetEnumerator();
+
+    IEnumerator IEnumerable.GetEnumerator()
+    {
+      return GetEnumerator ();
+    }
+
+#if PHM_TEST_BUILD
+    public override string ToString ()
+    {
+      var sb = new StringBuilder (16);
+      Describe (sb, 0);
+      return sb.ToString ();
+    }
+#endif
+
+#if PHM_TEST_BUILD
+    internal abstract bool                      CheckInvariant  (uint h, int s);
+    internal abstract void                      Describe        (StringBuilder sb, int indent);
+#endif
+    internal virtual  bool                      Empty           ()
+    {
+      return false;
+    }
+    internal abstract bool                      Receive         (Func<K, V, bool> r);
+    internal abstract PersistentHashMap<K, V>  Set             (uint h, int s, PersistentHashMap.KeyValueNode<K, V> n);
+    internal abstract bool                      TryFind         (uint h, int s, K k, out V v);
+    internal abstract PersistentHashMap<K, V>  Unset           (uint h, int s, K k);
   }
 
   static partial class PersistentHashMap
   {
-    public static IPersistentHashMap<K, V> Empty<K, V> ()
+    public static PersistentHashMap<K, V> Empty<K, V> ()
       where K : IEquatable<K>
     {
-      return BaseNode<K ,V>.EmptyNode;
+      return PersistentHashMap<K ,V>.EmptyNode;
     }
 
     internal const int TrieShift    = 4                 ;
@@ -143,85 +213,7 @@ namespace PHM.CS
       return nvs;
     }
 
-    internal abstract partial class BaseNode<K, V> : IPersistentHashMap<K ,V>
-      where K : IEquatable<K>
-    {
-      public static readonly EmptyNode<K, V> EmptyNode = new EmptyNode<K, V> ();
-
-      bool IPersistentHashMap<K, V>.IsEmpty
-      {
-        get
-        {
-          return Empty ();
-        }
-      }
-
-      bool IPersistentHashMap<K, V>.Visit (Func<K, V, bool> r)
-      {
-        if (r != null)
-        {
-          return Receive (r);
-        }
-        else
-        {
-          return true;
-        }
-      }
-
-      IPersistentHashMap<K, V> IPersistentHashMap<K ,V>.Set (K k, V v)
-      {
-        var h = (uint)k.GetHashCode ();
-        return Set (h, 0, new KeyValueNode<K, V> (h, k, v));
-      }
-
-      bool IPersistentHashMap<K ,V>.TryFind (K k, out V v)
-      {
-        return TryFind ((uint)k.GetHashCode (), 0, k, out v);
-      }
-
-      public IPersistentHashMap<K, V> Unset (K k)
-      {
-        return Unset ((uint)k.GetHashCode (), 0, k) ?? EmptyNode;
-      }
-
-#if PHM_TEST_BUILD
-      bool IPersistentHashMap<K ,V>.CheckInvariant ()
-      {
-        return CheckInvariant (0, 0);
-      }
-#endif
-
-      public abstract IEnumerator<KeyValuePair<K, V>> GetEnumerator();
-
-      IEnumerator IEnumerable.GetEnumerator ()
-      {
-        return GetEnumerator ();
-      }
-
-      #if PHM_TEST_BUILD
-      public override string ToString ()
-      {
-        var sb = new StringBuilder (16);
-        Describe (sb, 0);
-        return sb.ToString ();
-      }
-#endif
-
-#if PHM_TEST_BUILD
-      internal abstract bool            CheckInvariant  (uint h, int s);
-      internal abstract void            Describe        (StringBuilder sb, int indent);
-#endif
-      internal virtual  bool            Empty           ()
-      {
-        return false;
-      }
-      internal abstract bool            Receive         (Func<K, V, bool> r);
-      internal abstract BaseNode<K, V>  Set             (uint h, int s, KeyValueNode<K, V> n);
-      internal abstract bool            TryFind         (uint h, int s, K k, out V v);
-      internal abstract BaseNode<K, V>  Unset           (uint h, int s, K k);
-    }
-
-    internal sealed partial class EmptyNode<K, V> : BaseNode<K, V>
+    internal sealed partial class EmptyNode<K, V> : PersistentHashMap<K, V>
       where K : IEquatable<K>
     {
       public override IEnumerator<KeyValuePair<K, V>> GetEnumerator()
@@ -250,7 +242,7 @@ namespace PHM.CS
         return true;
       }
 
-      internal sealed override BaseNode<K, V> Set (uint h, int s, KeyValueNode<K, V> n)
+      internal sealed override PersistentHashMap<K, V> Set (uint h, int s, KeyValueNode<K, V> n)
       {
         return n;
       }
@@ -261,13 +253,13 @@ namespace PHM.CS
         return false;
       }
 
-      internal override BaseNode<K, V> Unset (uint h, int s, K k)
+      internal override PersistentHashMap<K, V> Unset (uint h, int s, K k)
       {
         return null;
       }
     }
 
-    internal sealed partial class KeyValueNode<K, V> : BaseNode<K, V>
+    internal sealed partial class KeyValueNode<K, V> : PersistentHashMap<K, V>
       where K : IEquatable<K>
     {
       public readonly uint Hash  ;
@@ -304,7 +296,7 @@ namespace PHM.CS
         return r (Key, Value);
       }
 
-      internal sealed override BaseNode<K, V> Set (uint h, int s, KeyValueNode<K, V> n)
+      internal sealed override PersistentHashMap<K, V> Set (uint h, int s, KeyValueNode<K, V> n)
       {
         // TODO: Optimize if h,k and v are identical?
 
@@ -338,7 +330,7 @@ namespace PHM.CS
         }
       }
 
-      internal override BaseNode<K, V> Unset (uint h, int s, K k)
+      internal override PersistentHashMap<K, V> Unset (uint h, int s, K k)
       {
         if (Hash == h && Key.Equals (k))
         {
@@ -351,14 +343,14 @@ namespace PHM.CS
       }
     }
 
-    internal sealed partial class BitmapNode1<K, V> : BaseNode<K, V>
+    internal sealed partial class BitmapNode1<K, V> : PersistentHashMap<K, V>
       where K : IEquatable<K>
     {
-      public readonly uint              Bitmap  ;
-      public readonly BaseNode<K, V>    Node    ;
+      public readonly uint                      Bitmap  ;
+      public readonly PersistentHashMap<K, V>  Node    ;
 
       [MethodImpl (MethodImplOptions.AggressiveInlining)]
-      public BitmapNode1 (uint b, BaseNode<K, V> n)
+      public BitmapNode1 (uint b, PersistentHashMap<K, V> n)
       {
         Bitmap  = b ;
         Node    = n ;
@@ -410,7 +402,7 @@ namespace PHM.CS
         return true;
       }
 
-      internal sealed override BaseNode<K, V> Set (uint h, int s, KeyValueNode<K, V> n)
+      internal sealed override PersistentHashMap<K, V> Set (uint h, int s, KeyValueNode<K, V> n)
       {
         var bit = Bit (h, s);
         if ((bit & Bitmap) != 0)
@@ -419,11 +411,11 @@ namespace PHM.CS
         }
         else if (Bitmap < bit)
         {
-          return new BitmapNodeN<K,V> (Bitmap | bit, new BaseNode<K, V> [] { Node, n });
+          return new BitmapNodeN<K,V> (Bitmap | bit, new PersistentHashMap<K, V> [] { Node, n });
         }
         else
         {
-          return new BitmapNodeN<K,V> (bit | Bitmap, new BaseNode<K, V> [] { n, Node });
+          return new BitmapNodeN<K,V> (bit | Bitmap, new PersistentHashMap<K, V> [] { n, Node });
         }
       }
 
@@ -441,7 +433,7 @@ namespace PHM.CS
         }
       }
 
-      internal sealed override BaseNode<K, V> Unset (uint h, int s, K k)
+      internal sealed override PersistentHashMap<K, V> Unset (uint h, int s, K k)
       {
         var bit = Bit (h, s);
         if ((bit & Bitmap) != 0)
@@ -468,21 +460,21 @@ namespace PHM.CS
       }
     }
 
-    internal sealed partial class BitmapNodeN<K, V> : BaseNode<K, V>
+    internal sealed partial class BitmapNodeN<K, V> : PersistentHashMap<K, V>
       where K : IEquatable<K>
     {
       public readonly uint              Bitmap  ;
-      public readonly BaseNode<K, V>[]  Nodes   ;
+      public readonly PersistentHashMap<K, V>[]  Nodes   ;
 
       [MethodImpl (MethodImplOptions.AggressiveInlining)]
-      public BitmapNodeN (uint b, BaseNode<K, V>[] ns)
+      public BitmapNodeN (uint b, PersistentHashMap<K, V>[] ns)
       {
         Bitmap  = b ;
         Nodes   = ns;
       }
 
       [MethodImpl (MethodImplOptions.AggressiveInlining)]
-      public static BaseNode<K, V> FromTwoNodes (int s, uint h1, BaseNode<K, V> n1, uint h2, BaseNode<K, V> n2)
+      public static PersistentHashMap<K, V> FromTwoNodes (int s, uint h1, PersistentHashMap<K, V> n1, uint h2, PersistentHashMap<K, V> n2)
       {
         Debug.Assert (h1 != h2);
         Debug.Assert (s < TrieMaxShift);
@@ -582,7 +574,7 @@ namespace PHM.CS
         return true;
       }
 
-      internal sealed override BaseNode<K, V> Set (uint h, int s, KeyValueNode<K, V> n)
+      internal sealed override PersistentHashMap<K, V> Set (uint h, int s, KeyValueNode<K, V> n)
       {
         var bit = Bit (h, s);
         var localIdx = PopCount (Bitmap & (bit - 1));
@@ -621,7 +613,7 @@ namespace PHM.CS
         }
       }
 
-      internal sealed override BaseNode<K, V> Unset (uint h, int s, K k)
+      internal sealed override PersistentHashMap<K, V> Unset (uint h, int s, K k)
       {
         var bit = Bit (h, s);
         if ((bit & Bitmap) != 0)
@@ -658,13 +650,13 @@ namespace PHM.CS
       }
     }
 
-    internal sealed partial class BitmapNode16<K, V> : BaseNode<K, V>
+    internal sealed partial class BitmapNode16<K, V> : PersistentHashMap<K, V>
       where K : IEquatable<K>
     {
-      public readonly BaseNode<K, V>[]  Nodes   ;
+      public readonly PersistentHashMap<K, V>[]  Nodes   ;
 
       [MethodImpl (MethodImplOptions.AggressiveInlining)]
-      public BitmapNode16 (BaseNode<K, V>[] ns)
+      public BitmapNode16 (PersistentHashMap<K, V>[] ns)
       {
         Nodes   = ns ;
       }
@@ -728,7 +720,7 @@ namespace PHM.CS
         return true;
       }
 
-      internal sealed override BaseNode<K, V> Set (uint h, int s, KeyValueNode<K, V> n)
+      internal sealed override PersistentHashMap<K, V> Set (uint h, int s, KeyValueNode<K, V> n)
       {
         var localIdx  = (int)LocalHash (h, s);
         var nvs       = CopyArray (Nodes);
@@ -742,7 +734,7 @@ namespace PHM.CS
         return Nodes[localIdx].TryFind (h, s + TrieShift, k, out v);
       }
 
-      internal sealed override BaseNode<K, V> Unset (uint h, int s, K k)
+      internal sealed override PersistentHashMap<K, V> Unset (uint h, int s, K k)
       {
         var localIdx  = (int)LocalHash (h, s);
         var updated   = Nodes[localIdx].Unset (h, s + TrieShift, k);
@@ -765,7 +757,7 @@ namespace PHM.CS
       }
     }
 
-    internal sealed partial class HashCollisionNodeN<K, V> : BaseNode<K, V>
+    internal sealed partial class HashCollisionNodeN<K, V> : PersistentHashMap<K, V>
       where K : IEquatable<K>
     {
       public readonly uint                 Hash      ;
@@ -843,7 +835,7 @@ namespace PHM.CS
         return true;
       }
 
-      internal sealed override BaseNode<K, V> Set (uint h, int s, KeyValueNode<K, V> n)
+      internal sealed override PersistentHashMap<K, V> Set (uint h, int s, KeyValueNode<K, V> n)
       {
         if (Hash == h)
         {
@@ -890,7 +882,7 @@ namespace PHM.CS
         }
       }
 
-      internal override BaseNode<K, V> Unset (uint h, int s, K k)
+      internal override PersistentHashMap<K, V> Unset (uint h, int s, K k)
       {
         if (Hash == h)
         {
