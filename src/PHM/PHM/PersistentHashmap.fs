@@ -18,7 +18,7 @@
 //  and Phil Bagwell's Ideal Hash Trie (http://lampwww.epfl.ch/papers/idealhashtrees.pdf)
 //  and http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
 
-module Persistent
+namespace Persistent
 
 module Details = 
   open System
@@ -74,7 +74,6 @@ module Details =
   let inline equals<'T when 'T :> IEquatable<'T>> (l : 'T) (r : 'T)  = l.Equals r
 
 open Details
-open System.Runtime.CompilerServices;
 
 type [<AbstractClass>] PersistentHashMap<'K, 'V when 'K :> System.IEquatable<'K>>() =
   static let emptyNode = EmptyNode<'K, 'V> () :> PersistentHashMap<'K, 'V>
@@ -82,34 +81,30 @@ type [<AbstractClass>] PersistentHashMap<'K, 'V when 'K :> System.IEquatable<'K>
 #if PHM_TEST_BUILD
   abstract DoCheckInvariant : uint32  -> int  -> bool
 #endif
+  abstract DoIsEmpty        : unit    -> bool
   abstract DoVisit          : OptimizedClosures.FSharpFunc<'K, 'V, bool> -> bool
-  abstract Empty            : unit    -> bool
   abstract DoSet            : uint32  -> int  -> KeyValueNode<'K, 'V> -> PersistentHashMap<'K, 'V>
   abstract DoTryFind        : uint32  -> int  -> 'K -> 'V option
   abstract DoUnset          : uint32  -> int  -> 'K -> PersistentHashMap<'K, 'V>
 
-  default  x.Empty () = false
+  default  x.DoIsEmpty ()   = false
 
 #if PHM_TEST_BUILD
   member x.CheckInvariant () = x.DoCheckInvariant 0u 0
 #endif
-  member x.IsEmpty    = x.Empty ()
-  [<MethodImpl (MethodImplOptions.AggressiveInlining)>]
+  member x.IsEmpty    = x.DoIsEmpty ()
   member x.Visit   r  = x.DoVisit (OptimizedClosures.FSharpFunc<_, _, _>.Adapt r)
-  [<MethodImpl (MethodImplOptions.AggressiveInlining)>]
   member x.Set     k v=
     let h = hashOf k
     x.DoSet h 0 (KeyValueNode (h, k, v))
-  [<MethodImpl (MethodImplOptions.AggressiveInlining)>]
   member x.TryFind k  =
     let h = hashOf k
     x.DoTryFind h 0 k
-  [<MethodImpl (MethodImplOptions.AggressiveInlining)>]
   member x.Unset   k  =
     let h = hashOf k
     x.DoUnset h 0 k
 
-  static member internal EmptyHashMap = emptyNode
+  static member internal Empty = emptyNode
 
   static member internal FromTwoNodes shift h1 n1 h2 n2 : PersistentHashMap<_, _> =
     let b1 = bit h1 shift
@@ -128,10 +123,10 @@ and [<Sealed>] internal EmptyNode<'K, 'V when 'K :> System.IEquatable<'K>>() =
   override x.DoCheckInvariant h s = true
 #endif
   override x.DoVisit    r           = true
-  override x.Empty      ()          = true
+  override x.DoIsEmpty  ()          = true
   override x.DoSet      h s kv      = upcast kv
   override x.DoTryFind  h s k       = None
-  override x.DoUnset    h s k       = PersistentHashMap<'K, 'V>.EmptyHashMap
+  override x.DoUnset    h s k       = PersistentHashMap<'K, 'V>.Empty
 
 and [<Sealed>] KeyValueNode<'K, 'V when 'K :> System.IEquatable<'K>>(hash : uint32, key : 'K, value : 'V) =
   inherit PersistentHashMap<'K, 'V>()
@@ -161,7 +156,7 @@ and [<Sealed>] KeyValueNode<'K, 'V when 'K :> System.IEquatable<'K>>(hash : uint
       None
   override x.DoUnset    h s k       =
     if h = hash && equals k key then
-      PersistentHashMap<'K, 'V>.EmptyHashMap
+      PersistentHashMap<'K, 'V>.Empty
     else
       upcast x
 
@@ -195,10 +190,10 @@ and [<Sealed>] internal BitmapNode1<'K, 'V when 'K :> System.IEquatable<'K>>(bit
     let bit = bit h s
     if (bit &&& bitmap) <> 0u then
       let nn = node.DoUnset h (s + TrieShift) k
-      if refEqual nn PersistentHashMap<'K, 'V>.EmptyHashMap |> not then
+      if refEqual nn PersistentHashMap<'K, 'V>.Empty |> not then
         upcast BitmapNode1 (bitmap, nn)
       else
-        PersistentHashMap<'K, 'V>.EmptyHashMap
+        PersistentHashMap<'K, 'V>.Empty
     else
       upcast x
 
@@ -259,7 +254,7 @@ and [<Sealed>] internal BitmapNodeN<'K, 'V when 'K :> System.IEquatable<'K>>(bit
     let localIdx = localIdx bit bitmap
     if (bit &&& bitmap) <> 0u then
       let nn = nodes.[localIdx].DoUnset h (s + TrieShift) k
-      if refEqual nn PersistentHashMap<'K, 'V>.EmptyHashMap |> not then
+      if refEqual nn PersistentHashMap<'K, 'V>.Empty |> not then
         let nns = copyArray nodes
         nns.[localIdx] <- nn
         upcast BitmapNodeN (bitmap, nns)
@@ -270,7 +265,7 @@ and [<Sealed>] internal BitmapNodeN<'K, 'V when 'K :> System.IEquatable<'K>>(bit
         elif nodes.Length > 1 then
           upcast BitmapNode1 (bitmap &&& ~~~bit, nodes.[1 - localIdx])
         else
-          PersistentHashMap<'K, 'V>.EmptyHashMap
+          PersistentHashMap<'K, 'V>.Empty
     else
       upcast x
 
@@ -314,7 +309,7 @@ and [<Sealed>] internal BitmapNode16<'K, 'V when 'K :> System.IEquatable<'K>>(no
     let bit       = bit h s
     let localIdx  = localHash h s |> int
     let nn = nodes.[localIdx].DoUnset h (s + TrieShift) k
-    if refEqual nn PersistentHashMap<'K, 'V>.EmptyHashMap |> not then
+    if refEqual nn PersistentHashMap<'K, 'V>.Empty |> not then
       let nns = copyArray nodes
       nns.[localIdx] <- nn
       upcast BitmapNode16 (nns)
@@ -393,38 +388,9 @@ and [<Sealed>] internal HashCollisionNodeN<'K, 'V when 'K :> System.IEquatable<'
           let kv = keyValues.[localIdx ^^^ 1]
           upcast kv
         else
-          PersistentHashMap<'K, 'V>.EmptyHashMap
+          PersistentHashMap<'K, 'V>.Empty
       else
         upcast x
     else
       upcast x
-
-module PersistentHashMap =
-  [<GeneralizableValue>]
-  let empty<'K, 'V when 'K :> System.IEquatable<'K>> : PersistentHashMap<_, _> = upcast PersistentHashMap<'K, 'V>.EmptyHashMap
-
-  let inline isEmpty (m : PersistentHashMap<'K, 'V>) : bool =
-    m.IsEmpty
-
-  let inline tryFind (key : 'K) (m : PersistentHashMap<'K, 'V>) : 'V option =
-    m.TryFind key
-
-  let inline set (key : 'K) (value : 'V) (m : PersistentHashMap<'K, 'V>) : PersistentHashMap<'K, 'V> =
-    m.Set key value
-
-  let inline unset (key : 'K) (m : PersistentHashMap<'K, 'V>) : PersistentHashMap<'K, 'V> =
-    m.Unset key
-
-  let inline visit (visitor : 'K -> 'V -> bool) (m : PersistentHashMap<'K, 'V>) : bool =
-    m.Visit visitor
-
-  let inline toArray (m : PersistentHashMap<'K, 'V>) : ('K*'V) [] =
-    let ra = ResizeArray<_> 16
-    visit (fun k v -> ra.Add (k, v); true) m |> ignore
-    ra.ToArray ()
-
-  let inline length (m : PersistentHashMap<'K, 'V>) : int =
-    let l = ref 0
-    visit (fun k v -> incr l; true) m |> ignore
-    !l
 

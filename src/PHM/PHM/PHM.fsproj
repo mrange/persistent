@@ -79,7 +79,9 @@
   <Import Project="$(FSharpTargetsPath)" />
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
+    <Compile Include="PersistentHashMap.fsi" />
     <Compile Include="PersistentHashMap.fs" />
+    <Compile Include="PersistentHashMapModule.fs" />
     <None Include="App.config" />
     <Content Include="packages.config" />
   </ItemGroup>
