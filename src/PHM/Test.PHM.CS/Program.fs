@@ -180,7 +180,7 @@ module FsPropertyTests =
   open FsCheck
 
   let run () =
-    // Properties.``PHM toArray must contain all added values`` [|(38, ""); (26, ""); (46, ""); (-31, null); (-11, ""); (9, ""); (29, ""); (-28, ""); (8, ""); (-9, ""); (12, null); (11, ""); (0, ""); (31, null); (-45, ""); (-46, "")|] |> printfn "%A"
+    Properties.``PHM TryFind must return all added values`` [|(IntKey 33, StringKey 0); (StringKey -31, TupleKey (0,""))|] |> printfn "%A"
     Check.All<Properties> FsCheckConfig.config
 
 module PropertyTests =
@@ -571,7 +571,7 @@ module PerformanceTests =
 
     let inline doLookup fa phm =
       fa
-      |> Array.forall (fun (k, _) -> (PersistentHashMap.tryFind k phm).IsSome)
+      |> Array.forall (fun (k, _) -> PersistentHashMap.containsKey k phm)
 
     let inserted  = doInsert PersistentHashMap.empty
 

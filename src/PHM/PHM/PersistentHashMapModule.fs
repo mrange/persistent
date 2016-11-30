@@ -18,6 +18,11 @@ namespace Persistent
 
 module PersistentHashMap =
 
+  let inline containsKey (key : 'K) (m : PersistentHashMap<'K, 'V>) : bool =
+    match m.TryFind key with
+    | true, _ -> true
+    | _   , _ -> false
+
   [<GeneralizableValue>]
   let empty<'K, 'V when 'K :> System.IEquatable<'K>> : PersistentHashMap<_, _> = upcast PersistentHashMap<'K, 'V>.Empty
 
@@ -25,7 +30,9 @@ module PersistentHashMap =
     m.IsEmpty
 
   let inline tryFind (key : 'K) (m : PersistentHashMap<'K, 'V>) : 'V option =
-    m.TryFind key
+    match m.TryFind key with
+    | true, v -> Some v
+    | _   , _ -> None
 
   let inline set (key : 'K) (value : 'V) (m : PersistentHashMap<'K, 'V>) : PersistentHashMap<'K, 'V> =
     m.Set key value

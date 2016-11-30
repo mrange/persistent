@@ -84,7 +84,7 @@ type [<AbstractClass>] PersistentHashMap<'K, 'V when 'K :> System.IEquatable<'K>
   abstract DoIsEmpty        : unit    -> bool
   abstract DoVisit          : OptimizedClosures.FSharpFunc<'K, 'V, bool> -> bool
   abstract DoSet            : uint32  -> int  -> KeyValueNode<'K, 'V> -> PersistentHashMap<'K, 'V>
-  abstract DoTryFind        : uint32  -> int  -> 'K -> 'V option
+  abstract DoTryFind        : uint32*int*'K*byref<'V> -> bool
   abstract DoUnset          : uint32  -> int  -> 'K -> PersistentHashMap<'K, 'V>
 
   default  x.DoIsEmpty ()   = false
@@ -97,9 +97,10 @@ type [<AbstractClass>] PersistentHashMap<'K, 'V when 'K :> System.IEquatable<'K>
   member x.Set     k v=
     let h = hashOf k
     x.DoSet h 0 (KeyValueNode (h, k, v))
-  member x.TryFind k  =
+  member x.TryFind (k, rv : byref<'V>) =
+    rv <- Unchecked.defaultof<'V>
     let h = hashOf k
-    x.DoTryFind h 0 k
+    x.DoTryFind (h, 0, k, &rv)
   member x.Unset   k  =
     let h = hashOf k
     x.DoUnset h 0 k
@@ -122,11 +123,11 @@ and [<Sealed>] internal EmptyNode<'K, 'V when 'K :> System.IEquatable<'K>>() =
 #if PHM_TEST_BUILD
   override x.DoCheckInvariant h s = true
 #endif
-  override x.DoVisit    r           = true
-  override x.DoIsEmpty  ()          = true
-  override x.DoSet      h s kv      = upcast kv
-  override x.DoTryFind  h s k       = None
-  override x.DoUnset    h s k       = PersistentHashMap<'K, 'V>.Empty
+  override x.DoVisit    r             = true
+  override x.DoIsEmpty  ()            = true
+  override x.DoSet      h s kv        = upcast kv
+  override x.DoTryFind  (h, s, k, rv) = false
+  override x.DoUnset    h s k         = PersistentHashMap<'K, 'V>.Empty
 
 and [<Sealed>] KeyValueNode<'K, 'V when 'K :> System.IEquatable<'K>>(hash : uint32, key : 'K, value : 'V) =
   inherit PersistentHashMap<'K, 'V>()
@@ -149,11 +150,12 @@ and [<Sealed>] KeyValueNode<'K, 'V when 'K :> System.IEquatable<'K>>(hash : uint
       upcast HashCollisionNodeN (h, [| x; kv |])
     else
       PersistentHashMap<'K, 'V>.FromTwoNodes s hash x h kv
-  override x.DoTryFind  h s k       =
+  override x.DoTryFind  (h, s, k, rv) =
     if h = hash && equals k key then
-      Some value
+      rv <- value
+      true
     else
-      None
+      false
   override x.DoUnset    h s k       =
     if h = hash && equals k key then
       PersistentHashMap<'K, 'V>.Empty
@@ -180,12 +182,12 @@ and [<Sealed>] internal BitmapNode1<'K, 'V when 'K :> System.IEquatable<'K>>(bit
     else
       upcast BitmapNodeN (bit ||| bitmap, [| kv; node |])
 
-  override x.DoTryFind  h s k       =
+  override x.DoTryFind (h, s, k, rv) =
     let bit = bit h s
     if (bit &&& bitmap) <> 0u then
-      node.DoTryFind h (s + TrieShift) k
+      node.DoTryFind (h, (s + TrieShift), k, &rv)
     else
-      None
+      false
   override x.DoUnset    h s k       =
     let bit = bit h s
     if (bit &&& bitmap) <> 0u then
@@ -242,13 +244,13 @@ and [<Sealed>] internal BitmapNodeN<'K, 'V when 'K :> System.IEquatable<'K>>(bit
         upcast BitmapNodeN (bitmap ||| bit, nns)
       else
         upcast BitmapNode16 nns
-  override x.DoTryFind  h s k       =
+  override x.DoTryFind (h, s, k, rv)=
     let bit = bit h s
     if (bit &&& bitmap) <> 0u then
       let localIdx = localIdx bit bitmap
-      nodes.[localIdx].DoTryFind h (s + TrieShift) k
+      nodes.[localIdx].DoTryFind (h, (s + TrieShift), k, &rv)
     else
-      None
+      false
   override x.DoUnset    h s k       =
     let bit = bit h s
     let localIdx = localIdx bit bitmap
@@ -302,9 +304,9 @@ and [<Sealed>] internal BitmapNode16<'K, 'V when 'K :> System.IEquatable<'K>>(no
     let nns = copyArray nodes
     nns.[localIdx] <- nn
     upcast BitmapNode16 (nns)
-  override x.DoTryFind  h s k       =
+  override x.DoTryFind (h, s, k, rv)=
     let localIdx = localHash h s |> int
-    nodes.[localIdx].DoTryFind h (s + TrieShift) k
+    nodes.[localIdx].DoTryFind (h, (s + TrieShift), k, &rv)
   override x.DoUnset    h s k       =
     let bit       = bit h s
     let localIdx  = localHash h s |> int
@@ -343,11 +345,11 @@ and [<Sealed>] internal HashCollisionNodeN<'K, 'V when 'K :> System.IEquatable<'
     if i < keyValues.Length then
       let kv = keyValues.[i]
       if equals kv.Key key then
-        Some kv.Value
+        i
       else
         tryFind key (i + 1)
     else
-      None
+      -1
 
   let rec findIndex h k i =
     if i < keyValues.Length then
@@ -372,11 +374,16 @@ and [<Sealed>] internal HashCollisionNodeN<'K, 'V when 'K :> System.IEquatable<'
       upcast HashCollisionNodeN (h, nkvs)
     else
       PersistentHashMap<'K, 'V>.FromTwoNodes s hash x h kv
-  override x.DoTryFind  h s k       =
+  override x.DoTryFind (h, s, k, rv)=
     if h = hash then
-      tryFind k 0
+      let i = tryFind k 0
+      if i > -1 then
+        rv <- keyValues.[i].Value
+        true
+      else
+        false
     else
-      None
+      false
   override x.DoUnset    h s k       =
     if h = hash then
       let localIdx = findIndex h k 0

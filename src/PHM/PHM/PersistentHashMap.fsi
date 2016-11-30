@@ -20,6 +20,8 @@
 
 namespace Persistent
 
+open System.Runtime.InteropServices
+
 type [<AbstractClass>] PersistentHashMap<'K, 'V when 'K :> System.IEquatable<'K>> =
   class
     static member internal Empty : PersistentHashMap<'K, 'V>
@@ -28,18 +30,19 @@ type [<AbstractClass>] PersistentHashMap<'K, 'V when 'K :> System.IEquatable<'K>
     member CheckInvariant : unit -> bool
 #endif
     member IsEmpty        : bool
-    member Visit          : ('K -> 'V -> bool) -> bool
-    member Set            : 'K -> 'V -> PersistentHashMap<'K, 'V>
-    member TryFind        : 'K -> 'V option
-    member Unset          : 'K -> PersistentHashMap<'K, 'V>
+    member Visit          : v : ('K -> 'V -> bool) -> bool
+    member Set            : k : 'K -> v : 'V -> PersistentHashMap<'K, 'V>
+    member TryFind        : k : 'K*[<Out>] rv : byref<'V> -> bool
+    member Unset          : k : 'K -> PersistentHashMap<'K, 'V>
 
 #if PHM_TEST_BUILD
     abstract internal DoCheckInvariant : uint32  -> int  -> bool
 #endif
+    // TODO: Why aren't these tagged as internal in the generated assembly
     abstract internal DoIsEmpty        : unit    -> bool
     abstract internal DoVisit          : OptimizedClosures.FSharpFunc<'K, 'V, bool> -> bool
     abstract internal DoSet            : uint32  -> int  -> KeyValueNode<'K, 'V> -> PersistentHashMap<'K, 'V>
-    abstract internal DoTryFind        : uint32  -> int  -> 'K -> 'V option
+    abstract internal DoTryFind        : uint32*int*'K*byref<'V> -> bool
     abstract internal DoUnset          : uint32  -> int  -> 'K -> PersistentHashMap<'K, 'V>
   end
 and [<Sealed>] internal KeyValueNode<'K, 'V when 'K :> System.IEquatable<'K>> =
